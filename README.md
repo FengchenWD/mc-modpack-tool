@@ -8,7 +8,7 @@
 
 ## 运行要求
 
-- GitHub Release 提供的 `MC整合包工具.exe` 是单文件 Windows 版本，可直接运行，不需要另行安装 Python 或 pip 库。
+- GitHub Release 提供的 `MC-Modpack-Tool.exe` 是单文件 Windows 版本，可直接运行，不需要另行安装 Python 或 pip 库。
 - Python 3.10 或更高版本，并且 Python 安装中包含 Tkinter。
 - 安装网络依赖：`python -m pip install -r "依赖/requirements.txt"`。
 - `程序模块/compatibility_analyzer.py` 是兼容性检查模块，必须保留。

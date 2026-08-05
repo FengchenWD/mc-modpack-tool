@@ -49,8 +49,9 @@ jobs:
       - name: Prepare release metadata and licenses
         shell: pwsh
         run: |
-          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "发布/MC整合包工具.exe").Hash
-          "$hash *MC整合包工具.exe" | Set-Content -LiteralPath "发布/SHA256SUMS.txt" -Encoding utf8
+          Copy-Item -LiteralPath "发布/MC整合包工具.exe" -Destination "发布/MC-Modpack-Tool.exe" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "发布/MC-Modpack-Tool.exe").Hash
+          "$hash *MC-Modpack-Tool.exe" | Set-Content -LiteralPath "发布/SHA256SUMS.txt" -Encoding utf8
           Compress-Archive `
             -Path "THIRD_PARTY_LICENSES", "THIRD_PARTY_NOTICES.md" `
             -DestinationPath "发布/THIRD_PARTY_LICENSES-v1.0.0-beta.1.zip" `
@@ -61,7 +62,7 @@ jobs:
         with:
           name: MC-Modpack-Tool-v1.0.0-beta.1-windows
           path: |
-            发布/MC整合包工具.exe
+            发布/MC-Modpack-Tool.exe
             发布/SHA256SUMS.txt
             发布/THIRD_PARTY_LICENSES-v1.0.0-beta.1.zip
             LICENSE
