@@ -17,4 +17,4 @@ Copyright (c) 2026 风尘WD（FengchenWD）
 
 本许可不覆盖 Minecraft、CurseForge、Modrinth、各加载器、模组、资源包、光影包、整合包内容、第三方库、商标或其他第三方材料。这些内容分别归其权利人所有，并适用各自的许可和服务规则。
 
-[`USER_AGREEMENT.md`](告示和教程/USER_AGREEMENT.md) 约束软件运行、联网服务及用户具体使用行为，但不缩减接收者已经依据 CC BY-NC-SA 4.0 合法取得的版权许可权利。
+[MC整合包工具用户协议](告示和教程/USER_AGREEMENT.md) 约束软件运行、联网服务及用户具体使用行为，但不缩减接收者已经依据 CC BY-NC-SA 4.0 合法取得的版权许可权利。
