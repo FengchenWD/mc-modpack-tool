@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MC整合包工具
+MC整合包工具 
 ============
 维护增强版功能:
   - 精确匹配目标 Minecraft 与加载器版本，支持 CurseForge / Modrinth 回退
