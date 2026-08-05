@@ -7,7 +7,7 @@
 迁移模块可读取 CurseForge `.zip` 或 Modrinth `.mrpack`整合包内容，
 将整合包**转换为用户指定的 Minecraft版本**，**保留与原包一致的模组、材质包、光影包列表**，并按源格式输出迁移到指定版本后的整合包。
 
-[版本迁移器使用流程](告示和教程/process&instructions.md#%E7%89%88%E6%9C%AC%E8%BF%81%E7%A7%BB%E5%99%A8)
+[版本迁移器使用流程&说明](告示和教程/process&instructions.md#%E7%89%88%E6%9C%AC%E8%BF%81%E7%A7%BB%E5%99%A8) 
 
 设置页支持简体中文、繁体中文（香港）和 English，并可切换浅色/深色主题、自定义主题色和界面字体。服务端整合包打包模块将在后续版本中完善。
 
@@ -15,7 +15,7 @@
 
 [项目主页](https://github.com/FengchenWD/mc-modpack-tool) || [Windows 版本下载](https://github.com/FengchenWD/mc-modpack-tool/releases)
 
-## 运行要求
+## 运行相关
 
 - `MC-Modpack-Tool.exe` 是单文件 Windows 版本，可直接运行，不需要另行安装 Python 或 pip 库。
 
