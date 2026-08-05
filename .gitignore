@@ -1,0 +1,57 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Local builds, logs, archives, and private test material
+缓存/
+发布/
+日志/
+OLD/
+整合包/
+样例/
+测试/
+build/
+dist/
+*.exe
+*.zip
+*.mrpack
+*.jar
+*.disabled
+*.log
+
+# Local application state
+.mc_pack_migrator_config.json
+.*.tmp
+/build_secrets.py
+.env
+.env.*
+*.secret
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.dpapi
+credentials*
+secrets*
+
+# Local development and publication preparation files
+/资源/generate_logo.py
+/依赖/requirements-dev.txt
+/CONTRIBUTING.md
+/RELEASE_CHECKLIST.md
+/.github/ISSUE_TEMPLATE/
+/.github/workflows/tests.yml
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
