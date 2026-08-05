@@ -1,82 +1,20 @@
 # MC整合包工具
 
-这是一个 Windows Tkinter 桌面工具，通过统一主页和侧边栏提供“整合包版本迁移”与“整合包服务端打包”两个模块。当前版本迁移模块可读取 CurseForge `.zip` 或 Modrinth `.mrpack`，为新的 Minecraft / 加载器版本重新匹配清单中的模组、资源包和光影包、生成兼容性报告，并按源格式输出迁移后的整合包；设置页支持简体中文、繁体中文（香港）和 English，并可切换浅色/深色主题、自定义主题色和界面字体。服务端打包模块将在后续版本中完善。
+这是一个MC整合包工具，有“整合包版本迁移”与“整合包服务端打包”两个模块。当前版本（v1.0.0-beta.1）仅完成了迁移模块和基础设置功能。
 
-> 当前版本为公开预发布测试版 `v1.0.0-beta.1`。请在原包、实例和世界存档均有备份的环境中测试；兼容性报告不能替代 Minecraft 实际启动验证。
+迁移模块可读取 CurseForge `.zip` 或 Modrinth `.mrpack`整合包内容，将整合包转换为用户指定的 Minecraft版本 和 模组加载器 及 模组加载器的版本，保留与原包一致的模组、材质包、光影包列表，并按源格式输出迁移到指定版本后的整合包。
+
+设置页支持简体中文、繁体中文（香港）和 English，并可切换浅色/深色主题、自定义主题色和界面字体。服务端整合包打包模块将在后续版本中完善。
+
+> 当前版本为公开预发布测试版 `v1.0.0-beta.1`。请在原包、实例和世界存档均有备份的环境中测试；**兼容性报告不能替代 Minecraft 实际启动验证。**
 
 [项目主页](https://github.com/FengchenWD/mc-modpack-tool) · [Windows 版本下载](https://github.com/FengchenWD/mc-modpack-tool/releases)
 
 ## 运行要求
 
 - GitHub Release 提供的 `MC-Modpack-Tool.exe` 是单文件 Windows 版本，可直接运行，不需要另行安装 Python 或 pip 库。
-- Python 3.10 或更高版本，并且 Python 安装中包含 Tkinter。
-- 安装网络依赖：`python -m pip install -r "依赖/requirements.txt"`。
-- `程序模块/compatibility_analyzer.py` 是兼容性检查模块，必须保留。
-- `资源/mc_pack_migrator_logo.png` 是界面 Logo；缺失时程序仍可运行，但不会显示 Logo。
 
-## 目录结构
-
-- 根目录保留主程序、README、正式许可文本、许可范围说明、用户协议及安全说明。
-- `程序模块`：运行所需的兼容性分析模块。
-- `资源`：软件使用的 PNG 与 ICO Logo。
-- `依赖`：运行与发布依赖、可移植 PyInstaller 配置及构建脚本。
-- `THIRD_PARTY_LICENSES`：发布环境中 Python、Tcl/Tk、运行依赖和构建组件的完整许可与通知文本。
-- `.github/workflows`：仅手动触发、从受保护 Environment Secret 临时注入发布 Key 的预发布构建配置。
-- `样例`、`日志`、`缓存`、`整合包`、`发布`、`OLD`：仅限本地使用，已由 `.gitignore` 排除，不属于公开源码。
-
-运行：
-
-```powershell
-python "MC整合包工具.py"
-```
-
-## 从源码运行与构建
-
-`requirements.txt` 保持适合日常运行的兼容版本范围；公开二进制构建使用 `requirements-release.txt` 中的精确版本，便于复现发布环境。
-
-在 Windows 上构建单文件 EXE：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File "依赖/构建EXE.ps1"
-```
-
-构建输入均由 `.spec` 文件相对于项目根目录解析，不依赖作者电脑上的绝对路径。生成的 EXE 位于本地 `发布` 目录；该目录不提交到 Git 历史，正式二进制文件通过 GitHub Release 分发。
-
-### CurseForge API Key
-
-公开源码和 Git 历史不包含 CurseForge API Key。从源码运行时，通过环境变量 `CURSEFORGE_API_KEY` 提供 Key：
-
-```powershell
-$env:CURSEFORGE_API_KEY = "你的 Key"
-python "MC整合包工具.py"
-```
-
-本地构建脚本同样读取该环境变量。存在 Key 时，构建过程会临时生成已被 `.gitignore` 排除的根目录文件 `build_secrets.py`，供 PyInstaller 写入 EXE，并在构建结束或失败后删除。发布构建还会检查该模块确实进入 EXE；缺少 Key 或注入失败时直接停止。不要手动提交、共享或长期保留该文件。
-
-GitHub 上的预发布构建采用与 PCL 类似的方案：维护者先创建受保护的 `prerelease` GitHub Environment，将独立发布 Key 保存为该环境的 Secret `CURSEFORGE_API_KEY`，再从 `main` 分支手动运行预发布构建工作流。建议为该 Environment 配置部署审批。工作流只在构建期间临时生成 `build_secrets.py`，构建完成后删除，并上传 EXE artifact；公开源码不读取或包含该 Secret。
-
-此方案只防止 Key 进入公开源码和 Git 历史，并不能使分发后的 Key 保密。写入 EXE 的 Key 仍可能通过反编译、内存或网络流量被提取。发布时必须使用与个人及其他项目隔离、可随时撤销的专用 Key，并持续监控配额和异常调用；发现泄露或滥用时应立即撤销、轮换并重新构建发布文件。
-
-## 用户协议与许可
-
-首次运行时，软件会显示完整的[《用户协议与使用须知》](USER_AGREEMENT.md)。只有点击“我已阅读并同意”后才能进入主页；同意状态以版本号记录在当前用户本机的 `.mc_pack_migrator_config.json` 中，协议发生实质更新时可以要求重新确认。主页右下角的“用户协议”按钮可随时重新查看正文。
-
-本软件由 Bilibili UP 主[“风尘WD”](https://space.bilibili.com/1003434667)制作，并依据项目根目录中的官方完整 [`LICENSE`](LICENSE)、[`NOTICE.md`](NOTICE.md) 与 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 免费许可和分发。主要条件包括：
-
-- 署名（BY）：分享或修改时注明软件名称、作者、许可链接及修改情况。
-- 非商业性使用（NC）：不得主要用于获取商业利益或金钱报酬。
-- 相同方式共享（SA）：公开分发修改或演绎版本时继续使用本许可或兼容许可。
-- 不得附加法律或技术限制，阻止接收者行使许可已经授予的权利。
-
-上述内容仅是摘要；如有不一致，以 [CC BY-NC-SA 4.0 官方协议原文](https://creativecommons.org/licenses/by-nc-sa/4.0/) 为准。
-
-本软件在设计、代码起草、检查、调试及文字整理过程中使用了 AI 工具辅助，并非全部由作者逐行人工编写。AI 辅助不当然改变作者对其具有独创性的人类创作、选择、编排、修改及整合部分享有的权利，具体范围以适用法律认定为准。Minecraft、模组、资源包、光影包、第三方库、平台和商标仍归各自权利人所有并适用各自许可。
-
-本软件是围绕《Minecraft》整合包处理而独立开发的第三方辅助工具，不包含或替代游戏本体，也并非 Minecraft 官方产品；本软件不由 Mojang Studios 或 Microsoft 开发、批准、认可、赞助或背书。作者以遵守现行 [Minecraft EULA](https://www.minecraft.net/eula) 和 [Minecraft Usage Guidelines](https://www.minecraft.net/usage-guidelines) 为开发原则；用户仍须确保自己的具体使用、修改和分发行为符合官方现行规则及第三方内容许可。
-
-部分核心功能需要联网，并会按功能需要访问 CurseForge、Modrinth、加载器及下载服务。网络波动、DNS/代理、防火墙、平台限流或故障、地区网络差异等均可能造成暂时无法使用、超时、查询或下载失败。首次点击同意即表示用户已知悉并接受必要联网请求；不接受此类联网操作时，请勿使用本软件。
-
-## 推荐流程
+## 版本迁移器使用流程
 
 1. 选择并读取原整合包。
 2. 确认目标 Minecraft、加载器类型和加载器版本。
@@ -108,24 +46,30 @@ GitHub 上的预发布构建采用与 PCL 类似的方案：维护者先创建�
 
 归档读写仍会执行独立的安全校验，包括 ZIP 路径、重复路径、条目数量、解压大小和异常压缩比；这些校验不属于内容兼容性分析。
 
-## 能力边界
+## 用户协议与许可
 
-兼容性报告属于静态检查，不会启动 Minecraft，也不会执行模组代码。它无法证明 Mixin、注册表、数据包、模组方块/实体/维度或仅在运行时出现的冲突一定安全，也不会检查配置文件、世界存档或 `overrides` 中的内容。
+首次运行时，软件会显示完整的[《用户协议与使用须知》](USER_AGREEMENT.md)。只有点击“我已阅读并同意”后才能进入主页；同意状态以版本号记录在当前用户本机的 `.mc_pack_migrator_config.json` 中，协议发生实质更新时可以要求重新确认。主页右下角的“用户协议”按钮可随时重新查看正文。
 
-当前兼容性报告只支持 Forge、Fabric、NeoForge、Quilt，并且只处理模组、资源包、光影包三类清单内容。模组要求精确匹配目标 Minecraft 和加载器；资源包与光影包允许回退到同一 `major.minor`，且不按加载器筛选。未知 CurseForge 类别会跳过迁移查询并保留原清单条目。
+本软件由 Bilibili UP 主[“风尘WD”](https://space.bilibili.com/1003434667)制作，并依据项目根目录中的官方完整 [`LICENSE`](LICENSE)、[`NOTICE.md`](NOTICE.md) 与 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 免费许可和分发。主要条件包括：
 
-兼容性检查不会为了分析而下载目标 JAR，也不会读取 `fabric.mod.json`、`quilt.mod.json` 或模组字节码。因此，平台没有直接提供的版本约束、内嵌模组关系和仅运行时出现的冲突不会被确认。
+- 署名（BY）：分享或修改时注明软件名称、作者、许可链接及修改情况。
+- 非商业性使用（NC）：不得主要用于获取商业利益或金钱报酬。
+- 相同方式共享（SA）：公开分发修改或演绎版本时继续使用本许可或兼容许可。
+- 不得附加法律或技术限制，阻止接收者行使许可已经授予的权利。
 
-跨版本迁移按以下顺序确认身份：原 Modrinth project ID、ForgeCDN URL 中的 CurseForge fileID、SHA1/SHA512 精确反查，最后才是文件名文本搜索。一个条目同时带 Modrinth 和 ForgeCDN 精确证据时，原 Modrinth 项目没有目标文件后会继续尝试已验证的 CurseForge 项目。强身份项目没有目标版本时不会换成名称相似的其他项目。
+上述内容仅是摘要；如有不一致，以 [CC BY-NC-SA 4.0 官方协议原文](https://creativecommons.org/licenses/by-nc-sa/4.0/) 为准。
 
-文本搜索会清理文件扩展名、加载器和版本号噪声，分别评估项目标题与 slug，并在目标 MC/加载器可用的候选之间统一排名。附属、兼容、分支、Plus/Fork 类项目，或本体名后额外增加产品词的候选会被拒绝；相同分数且无法可靠区分时也不会自动选择。`32x/64x`、`2D/3D` 等资源规格会参与身份判断。保守拒绝可能增加“未找到”，但不会用弱匹配静默替换原项目。
+本软件在设计、代码起草、检查、调试及文字整理过程中使用了 AI 工具辅助，并非全部由作者逐行人工编写。AI 辅助不当然改变作者对其具有独创性的人类创作、选择、编排、修改及整合部分享有的权利，具体范围以适用法律认定为准。Minecraft、模组、资源包、光影包、第三方库、平台和商标仍归各自权利人所有并适用各自许可。
 
-依赖检查只使用 CurseForge / Modrinth 返回的直接关系。“可能缺少必需前置模组”仍只作为风险提示，不代表工具能够确认原整合包列表有误；工具不会为此查询、添加、恢复或启用模组。平台未提供的版本范围、可选或未知关系、递归依赖及跨平台项目等价身份不会被猜测。
+本软件是围绕《Minecraft》整合包处理而独立开发的第三方辅助工具，不包含或替代游戏本体，也并非 Minecraft 官方产品；本软件不由 Mojang Studios 或 Microsoft 开发、批准、认可、赞助或背书。作者以遵守现行 [Minecraft EULA](https://www.minecraft.net/eula) 和 [Minecraft Usage Guidelines](https://www.minecraft.net/usage-guidelines) 为开发原则；用户仍须确保自己的具体使用、修改和分发行为符合官方现行规则及第三方内容许可。
 
-API 与加载器版本查询必须联网；兼容性报告阶段不会下载目标模组文件。超时、认证失败、限流或平台服务异常不会伪装成“模组兼容”，而会显示查询失败。只有启用“构建完整包并嵌入可下载文件”时才会在构建阶段下载并校验目标文件。CurseForge 禁止第三方下载时，相关内容无法嵌入 Modrinth；构建期实际下载失败仍可能生成带“未包含”或“联网引用”提醒的包。未找到新版的旧禁用模组可能以警告形式保留旧 `.disabled` 文件。
+部分核心功能需要联网，并会按功能需要访问 CurseForge、Modrinth、加载器及下载服务。网络波动、DNS/代理、防火墙、平台限流或故障、地区网络差异等均可能造成暂时无法使用、超时、查询或下载失败。首次点击同意即表示用户已知悉并接受必要联网请求；不接受此类联网操作时，请勿使用本软件。
 
-整合包归档默认安全上限为：100,000 个 ZIP 条目、单项 2 GiB、总解压 8 GiB、元数据 16 MiB；大于等于 64 MiB 的条目压缩比不得超过 1000。超限内容会被拒绝。
+## 项目仓库目录结构
 
-公开源码不携带 CurseForge API Key；未配置 `CURSEFORGE_API_KEY` 的源码运行环境不能使用需要 CurseForge 认证的查询。官方预发布 EXE 可以包含构建时注入的专用 Key，但该 Key 应始终按可能被提取的公开客户端凭据管理。具体构建和轮换要求见上文“CurseForge API Key”及 [`SECURITY.md`](SECURITY.md)。
-
-安全问题的报告方式见 [`SECURITY.md`](SECURITY.md)，第三方组件许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)，公开版本变化记录见 [`CHANGELOG.md`](CHANGELOG.md)。
+- 根目录保留主程序、README、正式许可文本、许可范围说明、用户协议及安全说明。
+- `程序模块`：运行所需的兼容性分析模块。
+- `资源`：软件使用的 PNG 与 ICO Logo。
+- `依赖`：运行与发布依赖、可移植 PyInstaller 配置及构建脚本。
+- `THIRD_PARTY_LICENSES`：发布环境中 Python、Tcl/Tk、运行依赖和构建组件的完整许可与通知文本。
+- `.github/workflows`：仅手动触发、从受保护 Environment Secret 临时注入发布 Key 的预发布构建配置。
