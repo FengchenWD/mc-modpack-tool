@@ -4,7 +4,7 @@ Copyright (c) 2026 风尘WD（FengchenWD）
 
 本项目中由作者享有权利的原创代码、文档、界面素材与 Logo，依据
 [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/)
-许可，SPDX 标识为 `CC-BY-NC-SA-4.0`。完整且未经修改的官方英文法律文本见项目根目录 [`LICENSE`](告示和教程/LICENSE)。
+许可，SPDX 标识为 `CC-BY-NC-SA-4.0`。完整且未经修改的官方英文法律文本见项目根目录 [`LICENSE`](LICENSE)。
 
 主要条件摘要：
 
