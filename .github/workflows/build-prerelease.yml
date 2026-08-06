@@ -18,10 +18,10 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: "依赖/requirements-release.txt"
+          cache-dependency-path: "Python/依赖/requirements-release.txt"
 
       - name: Install release dependencies
-        run: python -m pip install -r "依赖/requirements-release.txt"
+        run: python -m pip install -r "Python/依赖/requirements-release.txt"
 
       - name: Validate CurseForge API key
         shell: pwsh
@@ -36,25 +36,25 @@ jobs:
         shell: pwsh
         env:
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-        run: powershell -ExecutionPolicy Bypass -File "依赖/构建EXE.ps1" -RequireCurseForgeKey
+        run: powershell -ExecutionPolicy Bypass -File "Python/依赖/构建EXE.ps1" -RequireCurseForgeKey
 
       - name: Verify temporary secret cleanup
         if: always()
         shell: pwsh
         run: |
-          if (Test-Path -LiteralPath "build_secrets.py") {
+          if (Test-Path -LiteralPath "Python/build_secrets.py") {
             throw "Temporary build_secrets.py was not removed."
           }
 
       - name: Prepare release metadata and licenses
         shell: pwsh
         run: |
-          Copy-Item -LiteralPath "发布/MC整合包工具.exe" -Destination "发布/MC-Modpack-Tool.exe" -Force
-          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "发布/MC-Modpack-Tool.exe").Hash
-          "$hash *MC-Modpack-Tool.exe" | Set-Content -LiteralPath "发布/SHA256SUMS.txt" -Encoding utf8
+          Copy-Item -LiteralPath "Python/发布/MC整合包工具.exe" -Destination "Python/发布/MC-Modpack-Tool.exe" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "Python/发布/MC-Modpack-Tool.exe").Hash
+          "$hash *MC-Modpack-Tool.exe" | Set-Content -LiteralPath "Python/发布/SHA256SUMS.txt" -Encoding utf8
           Compress-Archive `
-            -Path "THIRD_PARTY_LICENSES", "THIRD_PARTY_NOTICES.md" `
-            -DestinationPath "发布/THIRD_PARTY_LICENSES-v1.0.0-beta.1.zip" `
+            -Path "Python/THIRD_PARTY_LICENSES", "Python/THIRD_PARTY_NOTICES.md" `
+            -DestinationPath "Python/发布/THIRD_PARTY_LICENSES-v1.0.0-beta.1.zip" `
             -CompressionLevel Optimal
 
       - name: Upload unsigned prerelease artifact
@@ -62,12 +62,12 @@ jobs:
         with:
           name: MC-Modpack-Tool-v1.0.0-beta.1-windows
           path: |
-            发布/MC-Modpack-Tool.exe
-            发布/SHA256SUMS.txt
-            发布/THIRD_PARTY_LICENSES-v1.0.0-beta.1.zip
+            Python/发布/MC-Modpack-Tool.exe
+            Python/发布/SHA256SUMS.txt
+            Python/发布/THIRD_PARTY_LICENSES-v1.0.0-beta.1.zip
             LICENSE
             NOTICE.md
-            USER_AGREEMENT.md
-            THIRD_PARTY_NOTICES.md
+            告示和教程/USER_AGREEMENT.md
+            Python/THIRD_PARTY_NOTICES.md
           if-no-files-found: error
           retention-days: 14
