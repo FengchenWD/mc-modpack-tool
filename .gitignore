@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+.artifacts/
+.tmp/
+src/McModpackTool.App/Services/BuildSecrets.Local.cs
+发布/

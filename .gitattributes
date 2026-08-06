@@ -17,4 +17,4 @@ LICENSE text eol=lf
 *.ico binary
 
 # Preserve upstream legal text byte-for-byte, including original whitespace.
-Python/THIRD_PARTY_LICENSES/** -text -whitespace
+Python(旧版构建)/THIRD_PARTY_LICENSES/** -text -whitespace

@@ -1,0 +1,148 @@
+<UserControl x:Class="McModpackTool.App.Views.MigrationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="clr-namespace:McModpackTool.App"
+             Background="Transparent" Foreground="{DynamicResource TextBrush}">
+    <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+
+        <StackPanel Margin="26,20,26,9">
+            <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding [migration.title]}" />
+            <TextBlock Style="{StaticResource PageSubtitleStyle}" Text="{Binding [migration.subtitle]}" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      VerticalContentAlignment="Stretch">
+        <Grid Margin="22,8,22,10">
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+
+            <Border Style="{StaticResource CardStyle}" Padding="13">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Margin="0,0,10,0" Text="{Binding [migration.pack_file]}" />
+                        <TextBox x:Name="InputPathBox" Grid.Column="1" TextChanged="InputPathBox_TextChanged" />
+                        <Button x:Name="BrowseInputButton" Grid.Column="2" Margin="8,0" Style="{StaticResource FluentButtonStyle}" Click="BrowseInput_Click" Content="{Binding [migration.choose_file]}" />
+                        <Button x:Name="ReadButton" Grid.Column="3" Style="{StaticResource PrimaryButtonStyle}" Click="ReadPack_Click" Content="{Binding [migration.read_pack]}" />
+                    </Grid>
+                    <Border x:Name="DropZone" Margin="0,10,0,0" Padding="14,9" CornerRadius="7"
+                            Background="{DynamicResource SurfaceAltBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                            AllowDrop="True" DragEnter="DropZone_DragEnter" DragLeave="DropZone_DragLeave" DragOver="DropZone_DragOver" Drop="DropZone_Drop"
+                            MouseLeftButtonUp="DropZone_MouseLeftButtonUp" Cursor="Hand">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="38" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                            <TextBlock FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="{DynamicResource AccentBrush}" Text="&#xE898;" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Margin="9,0,0,0">
+                                <TextBlock FontWeight="SemiBold" Text="{Binding [migration.drop_title]}" />
+                                <TextBlock Style="{StaticResource HintStyle}" Margin="0,2,0,0" Text="{Binding [migration.drop_hint]}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="1" Margin="0,10,0,10">
+                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,5,0" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding [migration.source_overview]}" />
+                        <TextBox x:Name="OverviewBox" Grid.Row="1" Height="112" Margin="0,8,0,0" IsReadOnly="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" BorderThickness="0" Padding="0" Background="Transparent" />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="5,0,0,0" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                        <TextBlock Grid.ColumnSpan="4" Style="{StaticResource SectionTitleStyle}" Text="{Binding [migration.target]}" />
+                        <TextBlock Grid.Row="1" Margin="0,9,8,4" VerticalAlignment="Center" Text="Minecraft" />
+                        <TextBox x:Name="MinecraftBox" Grid.Row="1" Grid.Column="1" Margin="0,7,14,2" TextChanged="Target_TextChanged"
+                                 LostKeyboardFocus="MinecraftBox_LostKeyboardFocus" KeyDown="MinecraftBox_KeyDown" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Margin="0,9,8,4" VerticalAlignment="Center" Text="{Binding [migration.loader]}" />
+                        <ComboBox x:Name="LoaderCombo" Grid.Row="1" Grid.Column="3" Margin="0,7,0,2" SelectionChanged="Target_SelectionChanged">
+                            <ComboBoxItem Content="fabric" /><ComboBoxItem Content="forge" /><ComboBoxItem Content="neoforge" /><ComboBoxItem Content="quilt" />
+                        </ComboBox>
+
+                        <TextBlock Grid.Row="2" Margin="0,7,8,4" VerticalAlignment="Center" Text="{Binding [migration.loader_version]}" />
+                        <TextBox x:Name="LoaderVersionBox" Grid.Row="2" Grid.Column="1" Margin="0,5,14,2" TextChanged="Target_TextChanged" />
+                        <Button x:Name="FetchLoaderButton" Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="2" Margin="0,5,0,2" Style="{StaticResource FluentButtonStyle}" Click="FetchLoader_Click" Content="{Binding [migration.latest_loader]}" />
+
+                        <TextBlock Grid.Row="3" Margin="0,7,8,4" VerticalAlignment="Center" Text="{Binding [migration.output_dir]}" />
+                        <TextBox x:Name="OutputDirectoryBox" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,5,8,2" />
+                        <Button x:Name="BrowseOutputButton" Grid.Row="3" Grid.Column="3" Margin="0,5,0,2" Style="{StaticResource FluentButtonStyle}" Click="BrowseOutput_Click" Content="{Binding [migration.browse]}" />
+
+                        <TextBlock Grid.Row="4" Margin="0,7,8,0" VerticalAlignment="Center" Text="{Binding [migration.output_name]}" />
+                        <TextBox x:Name="OutputNameBox" Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,5,8,0" TextChanged="OutputNameBox_TextChanged" />
+                        <StackPanel Grid.Row="4" Grid.Column="3" Margin="0,5,0,0">
+                            <Button x:Name="AnalyzeButton" Style="{StaticResource PrimaryButtonStyle}" Click="Analyze_Click" IsEnabled="False" Content="{Binding [migration.check]}" />
+                            <TextBlock Width="126" Margin="0,4,0,0" TextAlignment="Center" Style="{StaticResource HintStyle}" FontSize="10" Text="{Binding [migration.analysis_hint]}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="8" MinHeight="170" MaxHeight="260">
+                <TabControl x:Name="ResultTabs">
+                    <TabItem Header="{Binding [migration.report]}">
+                        <Grid Margin="7">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <Grid>
+                                <TextBlock x:Name="CompatibilitySummary" VerticalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" Text="{Binding [migration.report_hint]}" />
+                                <Button x:Name="RefreshAnalysisButton" HorizontalAlignment="Right" Style="{StaticResource FluentButtonStyle}" IsEnabled="False" Click="Analyze_Click" Content="{Binding [migration.refresh]}" />
+                            </Grid>
+                            <DataGrid x:Name="CompatibilityGrid" Grid.Row="1" Margin="0,8,0,0" AutoGenerateColumns="False" SelectionMode="Single" SelectionChanged="CompatibilityGrid_SelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Width="85" Header="{Binding [tree.severity], Source={x:Static app:App.Localization}}" Binding="{Binding Severity}" />
+                                    <DataGridTextColumn Width="105" Header="{Binding [tree.category], Source={x:Static app:App.Localization}}" Binding="{Binding Scope}" />
+                                    <DataGridTextColumn Width="210" Header="{Binding [tree.item], Source={x:Static app:App.Localization}}" Binding="{Binding Item}" />
+                                    <DataGridTextColumn Width="*" Header="{Binding [tree.conclusion], Source={x:Static app:App.Localization}}" Binding="{Binding Message}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <TextBox x:Name="CompatibilityDetail" Grid.Row="2" Margin="0,7,0,0" Height="58" Visibility="Collapsed" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="{Binding [migration.files]}">
+                        <DataGrid x:Name="FilesGrid" Margin="7" AutoGenerateColumns="False" SelectionMode="Single"
+                                  PreviewMouseRightButtonDown="FilesGrid_PreviewMouseRightButtonDown"
+                                  PreviewKeyDown="FilesGrid_PreviewKeyDown">
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{Binding [action.exclude], Source={x:Static app:App.Localization}}" Click="ToggleExclude_Click" />
+                                    <Separator />
+                                    <MenuItem Header="CurseForge" Click="OpenCurseForge_Click" />
+                                    <MenuItem Header="Modrinth" Click="OpenModrinth_Click" />
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Width="2*" Header="{Binding [tree.name], Source={x:Static app:App.Localization}}" Binding="{Binding Name}" />
+                                <DataGridTextColumn Width="90" Header="{Binding [tree.source], Source={x:Static app:App.Localization}}" Binding="{Binding Source}" />
+                                <DataGridTextColumn Width="100" Header="{Binding [tree.category], Source={x:Static app:App.Localization}}" Binding="{Binding Category}" />
+                                <DataGridTextColumn Width="1.3*" Header="{Binding [tree.status], Source={x:Static app:App.Localization}}" Binding="{Binding Status}" />
+                                <DataGridTemplateColumn Width="90" Header="{Binding [tree.output], Source={x:Static app:App.Localization}}">
+                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><Button Padding="7,3" Style="{StaticResource FluentButtonStyle}" Click="ToggleExclude_Click" Content="{Binding Action}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="{Binding [migration.log]}">
+                        <TextBox x:Name="LogBox" Margin="7" IsReadOnly="True" FontFamily="Consolas" FontSize="12" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+                    </TabItem>
+                </TabControl>
+            </Border>
+        </Grid>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="22,10">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="{Binding [migration.ready]}" />
+                <ProgressBar x:Name="OperationProgress" Grid.Column="1" Height="5" Margin="18,0" VerticalAlignment="Center" Minimum="0" Maximum="1" />
+                <Button x:Name="CancelButton" Grid.Column="2" Margin="0,0,9,0" Style="{StaticResource FluentButtonStyle}"
+                        Visibility="Collapsed" IsEnabled="False" Click="Cancel_Click" Content="{Binding [common.cancel]}" />
+                <Button x:Name="BuildButton" Grid.Column="3" Style="{StaticResource PrimaryButtonStyle}" IsEnabled="False" Click="Build_Click" Content="{Binding [migration.build]}" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

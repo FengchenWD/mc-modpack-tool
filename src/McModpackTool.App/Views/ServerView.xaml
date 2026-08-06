@@ -1,0 +1,17 @@
+<UserControl x:Class="McModpackTool.App.Views.ServerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent" Foreground="{DynamicResource TextBrush}">
+    <Grid Margin="36,30">
+        <StackPanel>
+            <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding [server.title]}" />
+            <TextBlock Style="{StaticResource PageSubtitleStyle}" Text="{Binding [server.placeholder]}" />
+            <Border Style="{StaticResource CardStyle}" Margin="0,28,0,0" Padding="36" HorizontalAlignment="Stretch">
+                <StackPanel HorizontalAlignment="Center" Margin="0,30">
+                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="38" Foreground="{DynamicResource AccentBrush}" Text="&#xE950;" HorizontalAlignment="Center" />
+                    <TextBlock Margin="0,18,0,0" FontSize="15" Foreground="{DynamicResource MutedTextBrush}" Text="{Binding [server.placeholder]}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -1,0 +1,49 @@
+<Window x:Class="McModpackTool.App.Views.AgreementWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding [agreement.title]}" Width="820" Height="690"
+        MinWidth="650" MinHeight="540" WindowStartupLocation="CenterScreen"
+        Background="Transparent" Foreground="{DynamicResource TextBrush}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <Border Margin="1" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Border Background="{DynamicResource SidebarBrush}" CornerRadius="8,8,0,0" Padding="22,17">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="230" /></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitleStyle}" FontSize="20" Text="{Binding [agreement.title]}" />
+                        <TextBlock x:Name="VersionText" Style="{StaticResource HintStyle}" Margin="0,4,0,0" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource HintStyle}" Margin="0,0,0,5" Text="{Binding [agreement.language]}" />
+                        <ComboBox x:Name="LanguageCombo" SelectionChanged="LanguageCombo_SelectionChanged">
+                            <ComboBoxItem Tag="zh_CN" Content="简体中文" />
+                            <ComboBoxItem Tag="zh_HK" Content="繁體中文（香港）" />
+                            <ComboBoxItem Tag="en_US" Content="English" />
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="18,16" Padding="0">
+                <TextBox x:Name="AgreementText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                         BorderThickness="0" Padding="20,16" Background="Transparent" />
+            </Border>
+
+            <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,8,8" Padding="18,12">
+                <Grid>
+                    <Button HorizontalAlignment="Left" Style="{StaticResource FluentButtonStyle}" Click="License_Click">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE71B;" Margin="0,0,7,0" /><TextBlock Text="{Binding [agreement.license]}" /></StackPanel>
+                    </Button>
+                    <StackPanel x:Name="DecisionButtons" HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Button x:Name="DeclineButton" Style="{StaticResource DangerButtonStyle}" Margin="0,0,9,0" Click="Decline_Click" Content="{Binding [agreement.decline]}" />
+                        <Button x:Name="AcceptButton" Style="{StaticResource PrimaryButtonStyle}" Click="Accept_Click" Content="{Binding [agreement.accept]}" />
+                        <Button x:Name="CloseButton" Visibility="Collapsed" Style="{StaticResource PrimaryButtonStyle}" Click="Accept_Click" Content="{Binding [agreement.close]}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
