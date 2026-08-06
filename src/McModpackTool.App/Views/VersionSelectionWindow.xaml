@@ -1,0 +1,28 @@
+<Window x:Class="McModpackTool.App.Views.VersionSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding [server.version_select_title]}" Width="520" Height="250"
+        WindowStartupLocation="CenterOwner" WindowStyle="None" ResizeMode="NoResize"
+        Background="{DynamicResource AppBackgroundBrush}" Foreground="{DynamicResource TextBrush}">
+    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8"
+            Background="{DynamicResource SurfaceBrush}">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="40" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8,8,0,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid Margin="14,0,6,0">
+                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding [server.version_select_title]}" />
+                    <Button HorizontalAlignment="Right" Width="34" Height="30" Style="{StaticResource IconButtonStyle}"
+                            Content="&#xE8BB;" Click="Cancel_Click" />
+                </Grid>
+            </Border>
+            <StackPanel Grid.Row="1" Margin="20,18,20,12">
+                <TextBlock Style="{StaticResource HintStyle}" Text="{Binding [server.version_select_hint]}" />
+                <ComboBox x:Name="VersionCombo" Margin="0,14,0,0" DisplayMemberPath="DisplayName" />
+            </StackPanel>
+            <StackPanel Grid.Row="2" HorizontalAlignment="Right" Orientation="Horizontal" Margin="20,0,20,18">
+                <Button Margin="0,0,8,0" Style="{StaticResource FluentButtonStyle}" Click="Cancel_Click" Content="{Binding [common.cancel]}" />
+                <Button Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="Confirm_Click" Content="{Binding [common.ok]}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

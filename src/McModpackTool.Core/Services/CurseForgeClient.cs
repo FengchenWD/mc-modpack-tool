@@ -116,6 +116,30 @@ public sealed class CurseForgeClient : IDisposable
             ?? throw UnexpectedData("CurseForge 项目接口返回了意外的数据格式。");
     }
 
+    public async Task<IReadOnlyDictionary<long, CurseForgeProject>> GetProjectsByIdsAsync(
+        IEnumerable<long> projectIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(projectIds);
+        var normalized = projectIds.Where(id => id > 0).Distinct().Order().ToArray();
+        var result = new Dictionary<long, CurseForgeProject>();
+        foreach (var batch in normalized.Chunk(50))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var projects = await PostAsync<List<CurseForgeProject>>(
+                "/mods",
+                new BulkProjectsRequest { ModIds = batch },
+                cancellationToken).ConfigureAwait(false)
+                ?? throw UnexpectedData("CurseForge 批量项目接口返回了意外的数据格式。");
+            foreach (var project in projects.Where(project => project.Id > 0))
+            {
+                result[project.Id] = project;
+            }
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyDictionary<long, CurseForgeFile>> GetFilesByIdsAsync(
         IEnumerable<long> fileIds,
         CancellationToken cancellationToken = default)
@@ -379,5 +403,11 @@ public sealed class CurseForgeClient : IDisposable
     {
         [JsonPropertyName("fileIds")]
         public long[] FileIds { get; set; } = [];
+    }
+
+    private sealed class BulkProjectsRequest
+    {
+        [JsonPropertyName("modIds")]
+        public long[] ModIds { get; set; } = [];
     }
 }

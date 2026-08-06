@@ -3,6 +3,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:app="clr-namespace:McModpackTool.App"
              Background="Transparent" Foreground="{DynamicResource TextBrush}">
+    <UserControl.Resources>
+        <Style x:Key="ResizableColumnHeaderStyle" TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Padding" Value="10,0,3,0" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
 
@@ -92,7 +100,9 @@
                                 <TextBlock x:Name="CompatibilitySummary" VerticalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" Text="{Binding [migration.report_hint]}" />
                                 <Button x:Name="RefreshAnalysisButton" HorizontalAlignment="Right" Style="{StaticResource FluentButtonStyle}" IsEnabled="False" Click="Analyze_Click" Content="{Binding [migration.refresh]}" />
                             </Grid>
-                            <DataGrid x:Name="CompatibilityGrid" Grid.Row="1" Margin="0,8,0,0" AutoGenerateColumns="False" SelectionMode="Single" SelectionChanged="CompatibilityGrid_SelectionChanged">
+                            <DataGrid x:Name="CompatibilityGrid" Grid.Row="1" Margin="0,8,0,0" AutoGenerateColumns="False"
+                                      CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResizableColumnHeaderStyle}"
+                                      SelectionMode="Single" SelectionChanged="CompatibilityGrid_SelectionChanged">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Width="85" Header="{Binding [tree.severity], Source={x:Static app:App.Localization}}" Binding="{Binding Severity}" />
                                     <DataGridTextColumn Width="105" Header="{Binding [tree.category], Source={x:Static app:App.Localization}}" Binding="{Binding Scope}" />
@@ -104,7 +114,8 @@
                         </Grid>
                     </TabItem>
                     <TabItem Header="{Binding [migration.files]}">
-                        <DataGrid x:Name="FilesGrid" Margin="7" AutoGenerateColumns="False" SelectionMode="Single"
+                        <DataGrid x:Name="FilesGrid" Margin="7" AutoGenerateColumns="False" CanUserResizeColumns="True"
+                                  ColumnHeaderStyle="{StaticResource ResizableColumnHeaderStyle}" SelectionMode="Single"
                                   PreviewMouseRightButtonDown="FilesGrid_PreviewMouseRightButtonDown"
                                   PreviewKeyDown="FilesGrid_PreviewKeyDown">
                             <DataGrid.ContextMenu>

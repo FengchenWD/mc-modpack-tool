@@ -6,7 +6,7 @@
         MinWidth="650" MinHeight="540" WindowStartupLocation="CenterScreen"
         WindowStyle="None" ResizeMode="CanResize"
         Background="Transparent" Foreground="{DynamicResource TextBrush}"
-        UseLayoutRounding="True" SnapsToDevicePixels="True">
+        FontFamily="{DynamicResource AppFontFamily}" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Window.Resources>
         <Style x:Key="CaptionButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="46" />
@@ -124,9 +124,12 @@
                 </Border>
 
                 <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="18,16" Padding="0">
-                    <TextBox x:Name="AgreementText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                             BorderThickness="0" Padding="20,16" Background="Transparent" />
+                    <ScrollViewer x:Name="AgreementScrollViewer" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly"
+                                  Focusable="False" Padding="20,16">
+                        <TextBlock x:Name="AgreementText" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextBrush}" />
+                    </ScrollViewer>
                 </Border>
 
                 <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,8,8" Padding="18,12">

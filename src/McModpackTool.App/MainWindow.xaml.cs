@@ -39,7 +39,11 @@ public partial class MainWindow : Window
         };
         ContentHost.Content = home;
 
-        SourceInitialized += (_, _) => ApplyWindowMaterial();
+        SourceInitialized += (_, _) =>
+        {
+            WindowEffects.AttachWorkAreaMaximization(this);
+            ApplyWindowMaterial();
+        };
         App.Theme.ThemeChanged += (_, _) => Dispatcher.Invoke(ApplyWindowMaterial);
         Closing += MainWindow_Closing;
     }
@@ -149,8 +153,12 @@ public partial class MainWindow : Window
         _languageAnimation?.Cancel();
         try
         {
+            var shutdownTasks = new List<Task>();
             if (_pages.TryGetValue("migration", out FrameworkElement? page) && page is MigrationView migration)
-                await migration.ShutdownAsync();
+                shutdownTasks.Add(migration.ShutdownAsync());
+            if (_pages.TryGetValue("server", out FrameworkElement? serverPage) && serverPage is ServerView server)
+                shutdownTasks.Add(server.ShutdownAsync());
+            await Task.WhenAll(shutdownTasks);
             try { await App.SettingsStore.SaveAsync(App.Settings); }
             catch { }
         }

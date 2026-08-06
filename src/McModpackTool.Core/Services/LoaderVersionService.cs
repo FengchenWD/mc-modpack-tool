@@ -149,8 +149,12 @@ public sealed partial class LoaderVersionService : IDisposable
         string gameVersion,
         CancellationToken cancellationToken)
     {
+        bool legacy1201 = gameVersion == "1.20.1";
+        string metadataUrl = legacy1201
+            ? "https://maven.neoforged.net/releases/net/neoforged/forge/maven-metadata.xml"
+            : "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
         var xml = await GetTextAsync(
-            "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml",
+            metadataUrl,
             cancellationToken).ConfigureAwait(false);
         var parts = gameVersion.Split('.').Select(part => int.Parse(
             part,
@@ -161,16 +165,24 @@ public sealed partial class LoaderVersionService : IDisposable
             return string.Empty;
         }
 
-        var prefix = gameVersion == "1.20.1"
-            ? "47.1."
-            : $"{parts[1].ToString(CultureInfo.InvariantCulture)}."
-                + $"{(parts.Length > 2 ? parts[2] : 0).ToString(CultureInfo.InvariantCulture)}.";
         var document = XDocument.Parse(xml, LoadOptions.None);
-        var versions = document
+        IEnumerable<string> versions = document
             .Descendants()
             .Where(element => element.Name.LocalName == "version")
-            .Select(element => element.Value.Trim())
-            .Where(version => NeoForgeNumericVersionRegex(prefix).IsMatch(version));
+            .Select(element => element.Value.Trim());
+        if (legacy1201)
+        {
+            const string legacyPrefix = "1.20.1-";
+            versions = versions
+                .Where(version => version.StartsWith(legacyPrefix + "47.1.", StringComparison.Ordinal))
+                .Select(version => version[legacyPrefix.Length..]);
+        }
+        else
+        {
+            string prefix = $"{parts[1].ToString(CultureInfo.InvariantCulture)}."
+                + $"{(parts.Length > 2 ? parts[2] : 0).ToString(CultureInfo.InvariantCulture)}.";
+            versions = versions.Where(version => NeoForgeNumericVersionRegex(prefix).IsMatch(version));
+        }
         return LatestNumericVersion(versions);
     }
 

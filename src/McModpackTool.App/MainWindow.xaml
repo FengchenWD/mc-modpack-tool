@@ -4,7 +4,8 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="{Binding [app.name]}" Width="1280" Height="800" MinWidth="1100" MinHeight="680"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
-        Foreground="{DynamicResource TextBrush}" UseLayoutRounding="True" SnapsToDevicePixels="True">
+        Foreground="{DynamicResource TextBrush}" FontFamily="{DynamicResource AppFontFamily}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Window.Resources>
         <Style x:Key="NavStyle" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />

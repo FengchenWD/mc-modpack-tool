@@ -39,7 +39,7 @@
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid Margin="36,30,36,28" MaxWidth="900" HorizontalAlignment="Center">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <StackPanel>
                 <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding [settings.title]}" />
                 <TextBlock Style="{StaticResource PageSubtitleStyle}" Text="{Binding [settings.subtitle]}" />
@@ -126,6 +126,26 @@
                                        Foreground="{DynamicResource TextBrush}" Text="{Binding [settings.font_preview]}" />
                         </Border>
                     </Grid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="5" Style="{StaticResource CardStyle}" Margin="0,12,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding [settings.about]}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,5,24,0">
+                            <TextBlock Style="{StaticResource HintStyle}" Text="{Binding [settings.version]}" />
+                            <TextBlock Style="{StaticResource HintStyle}" Margin="8,0,0,0" FontWeight="SemiBold" Text="v1.0.0-beta.2" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource FluentButtonStyle}" IsEnabled="False"
+                            ToolTip="{Binding [settings.update_unavailable]}" ToolTipService.ShowOnDisabled="True">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE895;" Margin="0,0,7,0" />
+                            <TextBlock Text="{Binding [settings.check_updates]}" />
+                        </StackPanel>
+                    </Button>
                 </Grid>
             </Border>
         </Grid>

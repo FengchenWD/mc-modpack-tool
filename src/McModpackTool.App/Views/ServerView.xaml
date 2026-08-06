@@ -1,17 +1,220 @@
 <UserControl x:Class="McModpackTool.App.Views.ServerView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="clr-namespace:McModpackTool.App"
              Background="Transparent" Foreground="{DynamicResource TextBrush}">
-    <Grid Margin="36,30">
-        <StackPanel>
+    <UserControl.Resources>
+        <Style x:Key="SourceModeStyle" TargetType="RadioButton">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="MinWidth" Value="86" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Root" Margin="2" Padding="{TemplateBinding Padding}"
+                                Background="Transparent" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource AccentBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="26,20,26,9">
             <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding [server.title]}" />
-            <TextBlock Style="{StaticResource PageSubtitleStyle}" Text="{Binding [server.placeholder]}" />
-            <Border Style="{StaticResource CardStyle}" Margin="0,28,0,0" Padding="36" HorizontalAlignment="Stretch">
-                <StackPanel HorizontalAlignment="Center" Margin="0,30">
-                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="38" Foreground="{DynamicResource AccentBrush}" Text="&#xE950;" HorizontalAlignment="Center" />
-                    <TextBlock Margin="0,18,0,0" FontSize="15" Foreground="{DynamicResource MutedTextBrush}" Text="{Binding [server.placeholder]}" />
-                </StackPanel>
-            </Border>
+            <TextBlock Style="{StaticResource PageSubtitleStyle}" Text="{Binding [server.subtitle]}" />
         </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="22,8,22,12" MaxWidth="1180" HorizontalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Style="{StaticResource CardStyle}" Padding="14">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" Margin="0,0,10,0" Text="{Binding [server.source_type]}" />
+                            <Border Grid.Column="1" Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="2">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="DirectoryModeButton" GroupName="ServerSourceMode" IsChecked="True"
+                                                 Style="{StaticResource SourceModeStyle}" Checked="SourceMode_Checked"
+                                                 Content="{Binding [server.directory]}" />
+                                    <RadioButton x:Name="ArchiveModeButton" GroupName="ServerSourceMode"
+                                                 Style="{StaticResource SourceModeStyle}" Checked="SourceMode_Checked"
+                                                 Content="{Binding [server.modpack]}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="InputLabel" Grid.Column="3" VerticalAlignment="Center" Margin="0,0,10,0"
+                                       Text="{Binding [server.source_path]}" />
+                            <TextBox x:Name="InputPathBox" Grid.Column="4" TextChanged="InputPathBox_TextChanged" />
+                            <Button x:Name="BrowseInputButton" Grid.Column="5" Margin="8,0" Style="{StaticResource FluentButtonStyle}"
+                                    Click="BrowseInput_Click" Content="{Binding [server.choose_directory]}" />
+                            <Button x:Name="ReadButton" Grid.Column="6" Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="Read_Click" Content="{Binding [server.read]}" />
+                        </Grid>
+
+                        <Border x:Name="DropZone" Margin="0,10,0,0" Padding="14,9" CornerRadius="7" Visibility="Collapsed"
+                                Background="{DynamicResource SurfaceAltBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                AllowDrop="True" DragEnter="DropZone_DragEnter" DragLeave="DropZone_DragLeave"
+                                DragOver="DropZone_DragOver" Drop="DropZone_Drop" MouseLeftButtonUp="DropZone_MouseLeftButtonUp" Cursor="Hand">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="38" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="{DynamicResource AccentBrush}"
+                                           Text="&#xE898;" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Margin="9,0,0,0">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding [server.drop_title]}" />
+                                    <TextBlock Style="{StaticResource HintStyle}" Margin="0,2,0,0" Text="{Binding [server.drop_hint]}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="1" Margin="0,10,0,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="0.9*" /><ColumnDefinition Width="1.1*" /></Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,5,0" Padding="14">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding [server.source_overview]}" />
+                            <TextBox x:Name="OverviewBox" Grid.Row="1" Height="174" Margin="0,8,0,0" IsReadOnly="True"
+                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" BorderThickness="0" Padding="0" Background="Transparent" />
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="5,0,0,0" Padding="14">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock Grid.ColumnSpan="3" Style="{StaticResource SectionTitleStyle}" Text="{Binding [server.environment]}" />
+                            <TextBlock Grid.Row="1" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.target_version]}" />
+                            <TextBox x:Name="TargetVersionBox" Grid.Row="1" Grid.Column="1" Margin="0,8,8,0"
+                                     TextChanged="TargetVersionBox_TextChanged" />
+                            <TextBlock x:Name="VersionModeHint" Grid.Row="2" Grid.ColumnSpan="3" Margin="0,5,0,2"
+                                       Style="{StaticResource HintStyle}" Text="{Binding [server.directory_version_hint]}" />
+                            <TextBlock Grid.Row="3" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.loader]}" />
+                            <TextBox x:Name="LoaderBox" Grid.Row="3" Grid.Column="1" Margin="0,8,8,0" IsReadOnly="True" />
+                            <TextBox x:Name="LoaderVersionBox" Grid.Row="3" Grid.Column="2" Width="150" Margin="0,8,0,0" IsReadOnly="True" />
+                            <TextBlock Grid.Row="4" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.core]}" />
+                            <ComboBox x:Name="CoreCombo" Grid.Row="4" Grid.Column="1" Margin="0,8,8,0" DisplayMemberPath="DisplayName" />
+                            <Button x:Name="RefreshCoresButton" Grid.Row="4" Grid.Column="2" Margin="0,8,0,0"
+                                    Style="{StaticResource FluentButtonStyle}" Click="RefreshCores_Click" Content="{Binding [server.core_refresh]}" />
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="220" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding [server.content]}" />
+                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                <Button x:Name="SelectAllModsButton" Style="{StaticResource FluentButtonStyle}" Margin="0,0,7,0" Click="SelectAllMods_Click" Content="{Binding [server.select_all]}" />
+                                <Button x:Name="ClearAllModsButton" Style="{StaticResource FluentButtonStyle}" Click="ClearAllMods_Click" Content="{Binding [server.clear_all]}" />
+                            </StackPanel>
+                        </Grid>
+                        <DataGrid x:Name="ModsGrid" Grid.Row="1" Margin="0,9,0,0" AutoGenerateColumns="False" IsReadOnly="False"
+                                  CanUserResizeColumns="True" SelectionMode="Single">
+                            <DataGrid.Columns>
+                                <DataGridCheckBoxColumn Width="46" Binding="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <DataGridTextColumn Width="2*" IsReadOnly="True" Header="{Binding [server.mod_name], Source={x:Static app:App.Localization}}" Binding="{Binding Name}" />
+                                <DataGridTextColumn Width="1.5*" IsReadOnly="True" Header="{Binding [server.mod_path], Source={x:Static app:App.Localization}}" Binding="{Binding RelativePath}" />
+                                <DataGridTextColumn Width="130" IsReadOnly="True" Header="{Binding [server.mod_support], Source={x:Static app:App.Localization}}" Binding="{Binding Support}" />
+                                <DataGridTextColumn Width="115" IsReadOnly="True" Header="{Binding [server.mod_source], Source={x:Static app:App.Localization}}" Binding="{Binding Source}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <Grid Grid.Row="2" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="2*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <WrapPanel x:Name="OptionalDirectoriesPanel" VerticalAlignment="Center">
+                                <CheckBox x:Name="ConfigCheckBox" Margin="0,0,20,7" Content="{Binding [server.config]}" />
+                                <CheckBox x:Name="DefaultConfigsCheckBox" Margin="0,0,20,7" Content="{Binding [server.defaultconfigs]}" />
+                                <CheckBox x:Name="KubeJsCheckBox" Margin="0,0,20,7" Content="{Binding [server.kubejs]}" />
+                                <CheckBox x:Name="ScriptsCheckBox" Margin="0,0,20,7" Content="{Binding [server.scripts]}" />
+                            </WrapPanel>
+                            <Grid Grid.Column="1">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" Margin="0,0,10,0" Text="{Binding [server.world]}" />
+                                <ComboBox x:Name="WorldCombo" Grid.Column="1" DisplayMemberPath="DisplayName" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="3" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,5,0" Padding="14">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock Grid.ColumnSpan="3" Style="{StaticResource SectionTitleStyle}" Text="{Binding [server.output]}" />
+                            <TextBlock Grid.Row="1" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.output_dir]}" />
+                            <TextBox x:Name="OutputDirectoryBox" Grid.Row="1" Grid.Column="1" Margin="0,8,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Margin="0,8,0,0" Style="{StaticResource FluentButtonStyle}"
+                                    Click="BrowseOutput_Click" Content="{Binding [server.browse]}" />
+                            <TextBlock Grid.Row="2" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.output_name]}" />
+                            <TextBox x:Name="OutputNameBox" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0" />
+                        </Grid>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="5,0,0,0" Padding="14">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="110" /></Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding [server.log]}" />
+                            <TextBox x:Name="LogBox" Grid.Row="1" Margin="0,8,0,0" IsReadOnly="True" FontFamily="Consolas"
+                                     FontSize="11" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0" Padding="22,10">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="{Binding [server.ready]}" />
+                <ProgressBar x:Name="OperationProgress" Grid.Column="1" Height="5" Margin="18,0" VerticalAlignment="Center" Minimum="0" Maximum="1" />
+                <Button x:Name="CancelButton" Grid.Column="2" Margin="0,0,9,0" Style="{StaticResource FluentButtonStyle}"
+                        Visibility="Collapsed" IsEnabled="False" Click="Cancel_Click" Content="{Binding [common.cancel]}" />
+                <Button x:Name="PrepareButton" Grid.Column="3" Margin="0,0,9,0" Style="{StaticResource FluentButtonStyle}"
+                        IsEnabled="False" Click="Prepare_Click" Content="{Binding [server.prepare]}" />
+                <Button x:Name="BuildButton" Grid.Column="4" Style="{StaticResource PrimaryButtonStyle}"
+                        IsEnabled="False" Click="Build_Click" Content="{Binding [server.build]}" />
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

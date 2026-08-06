@@ -17,6 +17,7 @@ public sealed record ArtifactCompatibilityMetadata
     public string Id { get; init; } = string.Empty;
     public string Version { get; init; } = string.Empty;
     public string Loader { get; init; } = string.Empty;
+    public string ServerEnvironment { get; init; } = string.Empty;
     public IReadOnlyCollection<string> ModIds { get; init; } = Array.Empty<string>();
     public IReadOnlyCollection<string> Aliases { get; init; } = Array.Empty<string>();
     public IReadOnlyList<CompatibilityRelation> Relations { get; init; }
@@ -189,6 +190,7 @@ public static partial class ArtifactMetadataReader
         builder.Loader = Prefer(builder.Loader, "fabric");
         builder.Id = Prefer(builder.Id, GetScalarText(root, "id"));
         builder.Version = Prefer(builder.Version, GetScalarText(root, "version"));
+        builder.ServerEnvironment = Prefer(builder.ServerEnvironment, GetScalarText(root, "environment"));
         AddIdentity(builder.ModIds, builder.Id);
 
         if (root.TryGetProperty("provides", out var provides))
@@ -240,6 +242,12 @@ public static partial class ArtifactMetadataReader
         builder.Loader = Prefer(builder.Loader, "quilt");
         builder.Id = Prefer(builder.Id, GetScalarText(loader, "id"));
         builder.Version = Prefer(builder.Version, GetScalarText(loader, "version"));
+        if (root.TryGetProperty("minecraft", out var minecraft) && minecraft.ValueKind == JsonValueKind.Object)
+        {
+            builder.ServerEnvironment = Prefer(
+                builder.ServerEnvironment,
+                GetScalarText(minecraft, "environment"));
+        }
         AddIdentity(builder.ModIds, builder.Id);
 
         if (loader.TryGetProperty("provides", out var provides))
@@ -395,6 +403,7 @@ public static partial class ArtifactMetadataReader
         public string Id { get; set; } = string.Empty;
         public string Version { get; set; } = string.Empty;
         public string Loader { get; set; } = string.Empty;
+        public string ServerEnvironment { get; set; } = string.Empty;
         public List<string> ModIds { get; } = [];
         public List<string> Aliases { get; } = [];
         public List<CompatibilityRelation> Relations { get; } = [];
@@ -406,6 +415,7 @@ public static partial class ArtifactMetadataReader
             Id = Id,
             Version = Version,
             Loader = Loader,
+            ServerEnvironment = ServerEnvironment,
             ModIds = ModIds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Aliases = Aliases.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Relations = Relations.Distinct().ToArray(),

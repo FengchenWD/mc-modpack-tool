@@ -29,6 +29,7 @@ public partial class AgreementWindow : Window
         ContentRendered += (_, _) => ResetAgreementView();
         SourceInitialized += (_, _) =>
         {
+            WindowEffects.AttachWorkAreaMaximization(this);
             bool dark = App.Settings.Theme == "dark" || App.Settings.Theme == "system" && ThemeService.IsSystemDark();
             if (WindowEffects.Apply(this, dark))
                 Background = System.Windows.Media.Brushes.Transparent;
@@ -52,7 +53,6 @@ public partial class AgreementWindow : Window
             App.Localization.SetLanguage(language);
             App.Settings.Language = language;
             AgreementText.Text = AgreementContent.Get(language);
-            AgreementText.Select(0, 0);
             await Dispatcher.InvokeAsync(ResetAgreementView, System.Windows.Threading.DispatcherPriority.Loaded, animation.Token);
             await AnimateOpacityAsync(AgreementText, 1, 145, animation.Token);
             try { await App.SettingsStore.SaveAsync(App.Settings); }
@@ -90,8 +90,8 @@ public partial class AgreementWindow : Window
 
     private void ResetAgreementView()
     {
-        AgreementText.Select(0, 0);
-        AgreementText.ScrollToHome();
+        AgreementScrollViewer.ScrollToTop();
+        AgreementScrollViewer.ScrollToLeftEnd();
     }
 
     private static async Task AnimateOpacityAsync(UIElement element, double target, int durationMs, CancellationToken cancellationToken)

@@ -17,6 +17,8 @@ public sealed record ArchiveSafetyOptions
     public int MaxMetadataBytes { get; init; } = 16 * 1024 * 1024;
     public long MaxDownloadBytes { get; init; } = 2L * 1024 * 1024 * 1024;
     public int CopyBufferBytes { get; init; } = 1024 * 1024;
+    public bool AllowServerOverrides { get; init; }
+    public bool IgnoreClientOverrides { get; init; }
 
     public static ArchiveSafetyOptions Default { get; } = new();
 }
@@ -28,11 +30,6 @@ public static class ArchiveSafety
         "con", "prn", "aux", "nul",
         "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
         "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
-    };
-
-    private static readonly HashSet<string> ScopedOverrideRoots = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "client-overrides", "server-overrides",
     };
 
     public static async Task ValidateArchiveAsync(
@@ -69,7 +66,11 @@ public static class ArchiveSafety
         {
             cancellationToken.ThrowIfCancellationRequested();
             var segments = ValidateEntryPath(entry.FullName);
-            var scopedRoot = segments.FirstOrDefault(ScopedOverrideRoots.Contains);
+            var scopedRoot = segments.FirstOrDefault(segment =>
+                (segment.Equals("server-overrides", StringComparison.OrdinalIgnoreCase)
+                    && !options.AllowServerOverrides) ||
+                (segment.Equals("client-overrides", StringComparison.OrdinalIgnoreCase)
+                    && !options.IgnoreClientOverrides));
             if (scopedRoot is not null)
             {
                 throw new InvalidDataException(
