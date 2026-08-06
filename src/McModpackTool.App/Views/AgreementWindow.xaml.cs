@@ -26,6 +26,7 @@ public partial class AgreementWindow : Window
             if (Equals(item.Tag, App.Localization.Language)) LanguageCombo.SelectedItem = item;
         AgreementText.Text = AgreementContent.Get(App.Localization.Language);
         _initializing = false;
+        ContentRendered += (_, _) => ResetAgreementView();
         SourceInitialized += (_, _) =>
         {
             bool dark = App.Settings.Theme == "dark" || App.Settings.Theme == "system" && ThemeService.IsSystemDark();
@@ -51,8 +52,8 @@ public partial class AgreementWindow : Window
             App.Localization.SetLanguage(language);
             App.Settings.Language = language;
             AgreementText.Text = AgreementContent.Get(language);
-            AgreementText.ScrollToHome();
-            await Dispatcher.InvokeAsync(static () => { }, System.Windows.Threading.DispatcherPriority.Loaded, animation.Token);
+            AgreementText.Select(0, 0);
+            await Dispatcher.InvokeAsync(ResetAgreementView, System.Windows.Threading.DispatcherPriority.Loaded, animation.Token);
             await AnimateOpacityAsync(AgreementText, 1, 145, animation.Token);
             try { await App.SettingsStore.SaveAsync(App.Settings); }
             catch (Exception exception)
@@ -82,6 +83,16 @@ public partial class AgreementWindow : Window
 
     private void Accept_Click(object sender, RoutedEventArgs e) => DialogResult = true;
     private void Decline_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void MinimizeWindow_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void MaximizeRestoreWindow_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    private void CloseWindow_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void ResetAgreementView()
+    {
+        AgreementText.Select(0, 0);
+        AgreementText.ScrollToHome();
+    }
 
     private static async Task AnimateOpacityAsync(UIElement element, double target, int durationMs, CancellationToken cancellationToken)
     {
