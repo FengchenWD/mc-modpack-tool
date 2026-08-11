@@ -2,12 +2,17 @@
 
 这是一个MC整合包工具，目前有 **“整合包版本迁移”** 、 **“整合包服务端一键打包”** 与 **客户端整合包打包** 三个模块。当前版本`v1.0.0-beta.4`完成了迁移模块、客户端打包、服务端一键打包和基础设置功能。
 
+<img width="1280" height="800" alt="image" src="https://github.com/user-attachments/assets/bdbb89cd-71cf-4b12-a12e-5a65908cb8f8" />
+
 ## 迁移模块介绍
 
 迁移模块可读取 CurseForge `.zip` 或 Modrinth `.mrpack`整合包内容，
 将整合包**转换为用户指定的 Minecraft版本**，**保留与原包一致的模组、材质包、光影包列表**，并按源格式输出迁移到指定版本后的整合包。
 
 [版本迁移器使用流程&说明](告示和教程/process&instructions.md#版本迁移器) 
+
+<img width="1280" height="800" alt="image" src="https://github.com/user-attachments/assets/2abc2aa9-6345-4d49-88a8-4cbc0491ab3c" />
+
 
 ## 服务端一键打包模块介绍
 
@@ -17,6 +22,8 @@
 
 [服务端一键打包使用流程&说明](告示和教程/process&instructions.md#服务端一键打包)
 
+<img width="1280" height="836" alt="image" src="https://github.com/user-attachments/assets/9521b081-4eeb-4147-ac09-9da42465035e" />
+
 ## 客户端整合包打包模块介绍
 
 客户端整合包打包模块可读取本地 Minecraft 游戏目录或版本隔离实例，识别其中的**模组、材质包、光影包、地图、配置及其他客户端数据**，并由用户选择需要导出的内容。
@@ -25,7 +32,17 @@
 
 [客户端整合包打包使用流程&说明](告示和教程/process&instructions.md#版本迁移器)
 
-设置页支持简体中文、繁体中文（香港）和 English，并可切换浅色/深色主题、自定义主题色和界面字体。服务端整合包打包模块将在后续版本中完善。
+<img width="1280" height="836" alt="image" src="https://github.com/user-attachments/assets/29ceb844-8edd-4734-97f4-f9a19b856738" />
+
+## 其他页面
+
+设置页支持**简体中文、繁体中文（香港）和 English**，并可切换浅色/深色主题、自定义主题色和界面字体，以及预留的软件更新按钮入口。
+
+<img width="1280" height="836" alt="image" src="https://github.com/user-attachments/assets/21560dae-ff77-4445-9af2-c8af2ca4c51a" />
+
+## 浅色模式预览
+
+<img width="1280" height="836" alt="image" src="https://github.com/user-attachments/assets/ce8eaae9-0738-4c5d-bc34-dfdf79b4b584" />
 
 > 当前版本为公开预发布测试版 `v1.0.0-beta.4`。
 > 请在原包、实例和世界存档均有备份的环境中测试；**兼容性报告不能替代 Minecraft 实际启动验证。**
