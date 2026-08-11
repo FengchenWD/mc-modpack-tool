@@ -15,6 +15,7 @@ public partial class HomeView : UserControl
     }
 
     private void Migration_Click(object sender, RoutedEventArgs e) => NavigationRequested?.Invoke(this, "migration");
+    private void ClientPack_Click(object sender, RoutedEventArgs e) => NavigationRequested?.Invoke(this, "client_pack");
     private void Server_Click(object sender, RoutedEventArgs e) => NavigationRequested?.Invoke(this, "server");
     private void Agreement_Click(object sender, RoutedEventArgs e) => new AgreementWindow(requireAcceptance: false) { Owner = Window.GetWindow(this) }.ShowDialog();
     private void Bilibili_Click(object sender, RoutedEventArgs e) => OpenUrl("https://space.bilibili.com/1003434667");

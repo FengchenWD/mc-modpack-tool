@@ -136,7 +136,7 @@
                         <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding [settings.about]}" />
                         <StackPanel Orientation="Horizontal" Margin="0,5,24,0">
                             <TextBlock Style="{StaticResource HintStyle}" Text="{Binding [settings.version]}" />
-                            <TextBlock Style="{StaticResource HintStyle}" Margin="8,0,0,0" FontWeight="SemiBold" Text="v1.0.0-beta.2" />
+                            <TextBlock Style="{StaticResource HintStyle}" Margin="8,0,0,0" FontWeight="SemiBold" Text="v1.0.0-beta.4" />
                         </StackPanel>
                     </StackPanel>
                     <Button Grid.Column="1" Style="{StaticResource FluentButtonStyle}" IsEnabled="False"

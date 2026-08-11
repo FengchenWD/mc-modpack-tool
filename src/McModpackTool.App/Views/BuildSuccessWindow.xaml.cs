@@ -13,10 +13,11 @@ public partial class BuildSuccessWindow : Window
     {
         InitializeComponent();
         DataContext = App.Localization;
-        MessageBox.Text = message;
+        MessageTextBox.Text = message;
         _outputPath = outputPath;
         SourceInitialized += (_, _) =>
         {
+            WindowEffects.AttachWorkAreaMaximization(this);
             bool dark = App.Settings.Theme == "dark" || App.Settings.Theme == "system" && ThemeService.IsSystemDark();
             if (WindowEffects.Apply(this, dark))
                 Background = System.Windows.Media.Brushes.Transparent;
@@ -36,7 +37,7 @@ public partial class BuildSuccessWindow : Window
         catch (Exception exception)
         {
             System.Diagnostics.Debug.WriteLine(exception);
-            System.Windows.MessageBox.Show(App.Localization["dialog.open_folder_failed"], App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(App.Localization["dialog.open_folder_failed"], App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

@@ -5,7 +5,6 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using Microsoft.Win32;
 using McModpackTool.App.Services;
 using McModpackTool.Core.Compatibility;
@@ -18,38 +17,57 @@ public partial class ServerView : UserControl
 {
     private readonly CurseForgeClient _curseForge;
     private readonly ModrinthClient _modrinth;
-    private readonly LoaderVersionService _loaderVersions = new();
-    private readonly ContentTargetResolver _targetResolver;
+    private readonly ServerModSupportResolver _supportResolver;
     private readonly CompatibilityAnalyzer _compatibilityAnalyzer = new();
     private readonly ServerArchiveSourceReader _archiveReader;
     private readonly ServerCoreService _coreService;
     private readonly ServerPackBuilder _builder;
-    private readonly ObservableCollection<ServerModRow> _modRows = [];
-    private readonly ObservableCollection<CoreRow> _coreRows = [];
-    private readonly ObservableCollection<WorldRow> _worldRows = [];
+    private readonly JavaRuntimeService _javaRuntimeService = new();
+    private readonly ModeState _directoryState = new();
+    private readonly ModeState _archiveState = new();
+    private ModeState _activeState;
     private CancellationTokenSource? _operationCts;
     private TaskCompletionSource? _operationCompletion;
-    private ServerPackSource? _source;
-    private string _readPath = string.Empty;
-    private string _lastAutomaticName = string.Empty;
-    private string _preparedSnapshot = string.Empty;
-    private string _statusKey = "server.ready";
     private bool _working;
-    private bool _outputNameEdited;
     private bool _suppressOutputNameChange;
+    private bool _restoringMode;
     private bool _disposed;
+    // A modal picker can return while the originating mouse event is still routing.
+    // Keep the picker single-entry so that event replay cannot open it twice.
+    private bool _inputPickerOpen;
+    private bool _downloadActive;
+    private double _downloadBytesPerSecond;
+
+    private ObservableCollection<ServerModRow> _modRows => _activeState.ModRows;
+    private ObservableCollection<CoreRow> _coreRows => _activeState.CoreRows;
+    private ObservableCollection<WorldRow> _worldRows => _activeState.WorldRows;
+    private ObservableCollection<JavaRuntimeInfo> _javaRuntimes => _activeState.JavaRuntimes;
+    private ServerPackSource? _source { get => _activeState.Source; set => _activeState.Source = value; }
+    private string _readPath { get => _activeState.ReadPath; set => _activeState.ReadPath = value; }
+    private string _lastAutomaticName { get => _activeState.LastAutomaticName; set => _activeState.LastAutomaticName = value; }
+    private string _preparedSnapshot { get => _activeState.PreparedSnapshot; set => _activeState.PreparedSnapshot = value; }
+    private string _statusKey { get => _activeState.StatusKey; set => _activeState.StatusKey = value; }
+    private bool _outputNameEdited { get => _activeState.OutputNameEdited; set => _activeState.OutputNameEdited = value; }
+    private string _selectedJavaPath { get => _activeState.SelectedJavaPath; set => _activeState.SelectedJavaPath = value; }
+    private int _recommendedJavaMajor { get => _activeState.RecommendedJavaMajor; set => _activeState.RecommendedJavaMajor = value; }
+    private bool _suppressJavaSelection;
+    private bool _suppressModSelectionRefresh;
 
     public ServerView()
     {
+        _activeState = _directoryState;
         InitializeComponent();
         DataContext = App.Localization;
         ModsGrid.ItemsSource = _modRows;
         CoreCombo.ItemsSource = _coreRows;
         WorldCombo.ItemsSource = _worldRows;
+        JavaCombo.ItemsSource = _javaRuntimes;
 
         _curseForge = new CurseForgeClient(BuildSecrets.CurseForgeApiKey);
         _modrinth = new ModrinthClient();
-        _targetResolver = new ContentTargetResolver(_curseForge, _modrinth);
+        _supportResolver = new ServerModSupportResolver(
+            _modrinth,
+            message => Dispatcher.Invoke(() => Log("WARN", message)));
         _archiveReader = new ServerArchiveSourceReader(_curseForge);
         _coreService = new ServerCoreService(logWarning: message => Dispatcher.Invoke(() => Log("WARN", message)));
         _builder = new ServerPackBuilder(_coreService);
@@ -58,6 +76,7 @@ public partial class ServerView : UserControl
         OutputNameBox.TextChanged += OutputNameBox_TextChanged;
         Unloaded += ServerView_Unloaded;
         ApplySourceMode();
+        ApplyJavaLocalization();
         RefreshLocalizedRows();
     }
 
@@ -75,8 +94,7 @@ public partial class ServerView : UserControl
         {
             await pendingOperation;
         }
-        CleanupSource();
-        _loaderVersions.Dispose();
+        CleanupAllSources();
         _builder.Dispose();
         _coreService.Dispose();
         _curseForge.Dispose();
@@ -91,11 +109,18 @@ public partial class ServerView : UserControl
         {
             return;
         }
-        ApplySourceMode();
-        if (_source is not null && !_working)
+        if (_working)
         {
-            ClearLoadedState(clearInput: true);
+            return;
         }
+        ModeState next = ArchiveMode ? _archiveState : _directoryState;
+        if (!ReferenceEquals(next, _activeState))
+        {
+            CaptureActiveMode();
+            _activeState = next;
+            RestoreActiveMode();
+        }
+        ApplySourceMode();
     }
 
     private void ApplySourceMode()
@@ -107,41 +132,301 @@ public partial class ServerView : UserControl
         InputLabel.Text = App.Localization[ArchiveMode ? "server.pack_path" : "server.source_path"];
         BrowseInputButton.Content = App.Localization[ArchiveMode ? "server.choose_pack" : "server.choose_directory"];
         DropZone.Visibility = ArchiveMode ? Visibility.Visible : Visibility.Collapsed;
-        VersionModeHint.Text = App.Localization[ArchiveMode ? "server.archive_version_hint" : "server.directory_version_hint"];
-        TargetVersionBox.IsReadOnly = !ArchiveMode;
+        VersionModeHint.Text = App.Localization["server.version_hint"];
+        MinecraftVersionBox.IsReadOnly = true;
     }
 
-    private void BrowseInput_Click(object sender, RoutedEventArgs e)
+    private void ApplyJavaLocalization()
+    {
+        if (ChooseJavaButton is null)
+        {
+            return;
+        }
+        ChooseJavaButton.Content = App.Localization["server.browse"];
+        RefreshJavaHint();
+    }
+
+    private void RefreshJavaHint()
+    {
+        if (JavaHintText is null)
+        {
+            return;
+        }
+        int recommended = _recommendedJavaMajor <= 0
+            ? JavaRuntimeService.RecommendedMajorVersion(MinecraftVersionBox?.Text)
+            : _recommendedJavaMajor;
+        JavaRuntimeInfo? selected = JavaCombo?.SelectedItem as JavaRuntimeInfo;
+        if (selected is null)
+        {
+            JavaHintText.Text = _source is null || _javaRuntimes.Count > 0
+                ? App.Localization["server.java_hint"]
+                : $"{App.Localization["server.java_hint"]}\n{App.Localization.Translate("server.dialog.java_none", recommended)}";
+            return;
+        }
+        bool exact = selected.MajorVersion == recommended;
+        JavaHintText.Text = exact
+            ? $"{App.Localization["server.java_hint"]}\nJava {selected.MajorVersion}"
+            : App.Localization.Translate("server.dialog.java_incompatible",
+                MinecraftVersionBox?.Text.Trim() ?? string.Empty, recommended, selected.MajorVersion);
+    }
+
+    private async Task RefreshJavaRuntimesAsync(string minecraftVersion, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> requirements = SelectedJavaRequirements();
+        JavaRuntimeDiscoveryResult result = await _javaRuntimeService.DiscoverAsync(
+            minecraftVersion, requirements, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        _recommendedJavaMajor = result.RecommendedMajorVersion;
+        _javaRuntimes.Clear();
+        foreach (JavaRuntimeInfo runtime in result.Runtimes)
+        {
+            _javaRuntimes.Add(runtime);
+        }
+
+        JavaRuntimeInfo? selected = !string.IsNullOrWhiteSpace(_selectedJavaPath)
+            ? _javaRuntimes.FirstOrDefault(runtime => runtime.ExecutablePath.Equals(
+                _selectedJavaPath, StringComparison.OrdinalIgnoreCase))
+            : null;
+        selected ??= result.Recommended;
+        selected ??= JavaRuntimeService.SelectBest(_javaRuntimes, result.RecommendedMajorVersion);
+        _selectedJavaPath = selected?.ExecutablePath ?? string.Empty;
+        _suppressJavaSelection = true;
+        try
+        {
+            JavaCombo.ItemsSource = _javaRuntimes;
+            JavaCombo.SelectedItem = selected;
+        }
+        finally
+        {
+            _suppressJavaSelection = false;
+        }
+        RefreshJavaHint();
+        if (result.Warning.Length > 0)
+        {
+            Log("WARN", result.Warning);
+        }
+        Log("INFO", $"Java runtimes detected: {_javaRuntimes.Count}; recommended={result.RecommendedMajorVersion}; mod requirements={string.Join(", ", requirements)}");
+    }
+
+    private IReadOnlyList<string> SelectedJavaRequirements() => _source?.Mods
+        .Where(entry => entry.Selected && !entry.Disabled)
+        .SelectMany(entry => entry.JavaVersionRequirements)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray() ?? [];
+
+    private void RefreshJavaRecommendation()
+    {
+        if (_source is null)
+        {
+            return;
+        }
+
+        _recommendedJavaMajor = JavaRuntimeService.RecommendedMajorVersion(
+            _source.MinecraftVersion,
+            SelectedJavaRequirements());
+        JavaRuntimeInfo? selected = JavaCombo.SelectedItem as JavaRuntimeInfo;
+        if (selected?.MajorVersion != _recommendedJavaMajor)
+        {
+            selected = JavaRuntimeService.SelectBest(_javaRuntimes, _recommendedJavaMajor);
+            _suppressJavaSelection = true;
+            try
+            {
+                JavaCombo.SelectedItem = selected;
+            }
+            finally
+            {
+                _suppressJavaSelection = false;
+            }
+            _selectedJavaPath = selected?.ExecutablePath ?? string.Empty;
+        }
+        RefreshJavaHint();
+    }
+
+    private void ModSelectionChanged()
+    {
+        if (_suppressModSelectionRefresh)
+        {
+            return;
+        }
+        RefreshJavaRecommendation();
+        InvalidatePreparation();
+    }
+
+    private void JavaCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressJavaSelection)
+        {
+            return;
+        }
+        _selectedJavaPath = (JavaCombo.SelectedItem as JavaRuntimeInfo)?.ExecutablePath ?? string.Empty;
+        RefreshJavaHint();
+        // The selected runtime is part of the preparation snapshot. A changed
+        // selection must require preparation again before export.
+        if (_source is not null)
+        {
+            InvalidatePreparation();
+        }
+    }
+
+    private async void ChooseJava_Click(object sender, RoutedEventArgs e)
     {
         if (_working)
         {
             return;
         }
-        if (ArchiveMode)
+        var dialog = new OpenFileDialog
         {
-            var dialog = new OpenFileDialog
-            {
-                Title = App.Localization["dialog.choose_pack"],
-                Filter = $"{App.Localization["dialog.filter_modpacks"]}|*.zip;*.mrpack|{App.Localization["dialog.filter_all"]}|*.*",
-                CheckFileExists = true,
-            };
-            if (dialog.ShowDialog(Window.GetWindow(this)) == true)
-            {
-                InputPathBox.Text = dialog.FileName;
-            }
+            Title = App.Localization["server.dialog.choose_java"],
+            Filter = "Java executable (java.exe)|java.exe|Executable files (*.exe)|*.exe",
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true)
+        {
             return;
         }
+        JavaRuntimeInfo? runtime = await _javaRuntimeService.ProbeExecutableAsync(dialog.FileName);
+        if (runtime is null)
+        {
+            MessageBox.Show(App.Localization["server.dialog.java_required"], App.Localization["common.warning"],
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        JavaRuntimeInfo? existing = _javaRuntimes.FirstOrDefault(candidate =>
+            candidate.ExecutablePath.Equals(runtime.ExecutablePath, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            _javaRuntimes.Add(runtime);
+            existing = runtime;
+        }
+        _selectedJavaPath = existing.ExecutablePath;
+        _suppressJavaSelection = true;
+        try { JavaCombo.SelectedItem = existing; }
+        finally { _suppressJavaSelection = false; }
+        InvalidatePreparation();
+        RefreshJavaHint();
+    }
 
-        using var folderDialog = new System.Windows.Forms.FolderBrowserDialog
+    private void CaptureActiveMode()
+    {
+        if (InputPathBox is null)
         {
-            Description = App.Localization["server.dialog.choose_directory"],
-            UseDescriptionForTitle = true,
-            ShowNewFolderButton = false,
-            SelectedPath = Directory.Exists(InputPathBox.Text) ? InputPathBox.Text : string.Empty,
-        };
-        if (folderDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            return;
+        }
+        _activeState.InputPath = InputPathBox.Text;
+        _activeState.MinecraftVersion = MinecraftVersionBox.Text;
+        _activeState.Loader = LoaderBox.Text;
+        _activeState.LoaderVersion = LoaderVersionBox.Text;
+        _activeState.OutputDirectory = OutputDirectoryBox.Text;
+        _activeState.OutputName = OutputNameBox.Text;
+        _activeState.IncludeConfig = ConfigCheckBox.IsChecked == true;
+        _activeState.IncludeDefaultConfigs = DefaultConfigsCheckBox.IsChecked == true;
+        _activeState.IncludeKubeJs = KubeJsCheckBox.IsChecked == true;
+        _activeState.IncludeScripts = ScriptsCheckBox.IsChecked == true;
+        _activeState.SelectedCore = CoreCombo.SelectedItem as CoreRow;
+        _activeState.SelectedWorld = WorldCombo.SelectedItem as WorldRow;
+        _activeState.SelectedJavaPath = (JavaCombo.SelectedItem as JavaRuntimeInfo)?.ExecutablePath
+            ?? _activeState.SelectedJavaPath;
+        _activeState.LogText = LogBox.Text;
+    }
+
+    private void RestoreActiveMode()
+    {
+        _restoringMode = true;
+        _suppressOutputNameChange = true;
+        try
         {
-            InputPathBox.Text = folderDialog.SelectedPath;
+            ModsGrid.ItemsSource = _modRows;
+            CoreCombo.ItemsSource = _coreRows;
+            WorldCombo.ItemsSource = _worldRows;
+            JavaCombo.ItemsSource = _javaRuntimes;
+            InputPathBox.Text = _activeState.InputPath;
+            MinecraftVersionBox.Text = _activeState.MinecraftVersion;
+            LoaderBox.Text = _activeState.Loader;
+            LoaderVersionBox.Text = _activeState.LoaderVersion;
+            OutputDirectoryBox.Text = _activeState.OutputDirectory;
+            OutputNameBox.Text = _activeState.OutputName;
+            ConfigCheckBox.IsChecked = _activeState.IncludeConfig;
+            DefaultConfigsCheckBox.IsChecked = _activeState.IncludeDefaultConfigs;
+            KubeJsCheckBox.IsChecked = _activeState.IncludeKubeJs;
+            ScriptsCheckBox.IsChecked = _activeState.IncludeScripts;
+            CoreCombo.SelectedItem = _activeState.SelectedCore is not null && _coreRows.Contains(_activeState.SelectedCore)
+                ? _activeState.SelectedCore
+                : _coreRows.FirstOrDefault();
+            WorldCombo.SelectedItem = _activeState.SelectedWorld is not null && _worldRows.Contains(_activeState.SelectedWorld)
+                ? _activeState.SelectedWorld
+                : _worldRows.FirstOrDefault();
+            _suppressJavaSelection = true;
+            try
+            {
+                JavaCombo.SelectedItem = _javaRuntimes.FirstOrDefault(runtime =>
+                    runtime.ExecutablePath.Equals(_activeState.SelectedJavaPath, StringComparison.OrdinalIgnoreCase));
+            }
+            finally
+            {
+                _suppressJavaSelection = false;
+            }
+            RefreshJavaHint();
+            LogBox.Text = _activeState.LogText;
+            LogBox.ScrollToEnd();
+            RefreshLocalizedRows();
+            RefreshOverview();
+            StatusText.Text = App.Localization[_statusKey];
+        }
+        finally
+        {
+            _suppressOutputNameChange = false;
+            _restoringMode = false;
+        }
+        SetWorking(false);
+    }
+
+    private void BrowseInput_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_working || _inputPickerOpen)
+        {
+            return;
+        }
+        _inputPickerOpen = true;
+        try
+        {
+            if (ArchiveMode)
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = App.Localization["dialog.choose_pack"],
+                    Filter = $"{App.Localization["dialog.filter_modpacks"]}|*.zip;*.mrpack|{App.Localization["dialog.filter_all"]}|*.*",
+                    CheckFileExists = true,
+                    Multiselect = false,
+                };
+                if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+                {
+                    InputPathBox.Text = dialog.FileName;
+                }
+                return;
+            }
+
+            using var folderDialog = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = App.Localization["server.dialog.choose_directory"],
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false,
+                SelectedPath = Directory.Exists(InputPathBox.Text) ? InputPathBox.Text : string.Empty,
+            };
+            if (folderDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                InputPathBox.Text = folderDialog.SelectedPath;
+            }
+        }
+        finally
+        {
+            // Release after the current input message has completely unwound.
+            // A modal dialog can otherwise let the same mouse event re-enter
+            // this handler immediately after ShowDialog returns.
+            Dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.ContextIdle,
+                new Action(() => _inputPickerOpen = false));
         }
     }
 
@@ -188,12 +473,14 @@ public partial class ServerView : UserControl
                 {
                     MessageBox.Show(App.Localization["server.dialog.reselect_instance"], App.Localization["common.warning"],
                         MessageBoxButton.OK, MessageBoxImage.Warning);
+                    SetStatus("server.ready");
                     return;
                 }
                 if (discovery.VersionCandidates.Count == 0)
                 {
                     MessageBox.Show(App.Localization["server.dialog.no_version"], App.Localization["common.error"],
                         MessageBoxButton.OK, MessageBoxImage.Error);
+                    SetStatus("server.ready");
                     return;
                 }
                 ServerVersionCandidate? candidate = discovery.VersionCandidates.Count == 1
@@ -201,6 +488,7 @@ public partial class ServerView : UserControl
                     : VersionSelectionWindow.Select(Window.GetWindow(this), discovery.VersionCandidates);
                 if (candidate is null)
                 {
+                    SetStatus("server.ready");
                     return;
                 }
                 source = await GameDirectoryScanner.ReadAsync(path, candidate, cancellationToken);
@@ -211,11 +499,51 @@ public partial class ServerView : UserControl
                 DisposeSource(source);
                 MessageBox.Show(App.Localization["server.dialog.quilt"], App.Localization["common.error"],
                     MessageBoxButton.OK, MessageBoxImage.Error);
+                SetStatus("server.ready");
                 return;
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await _supportResolver.ResolveAsync(source, cancellationToken);
+            }
+            catch
+            {
+                DisposeSource(source);
+                throw;
             }
             cancellationToken.ThrowIfCancellationRequested();
             ApplySource(source, path);
             Log("INFO", $"Source ready: Minecraft {source.MinecraftVersion}, {source.LoaderType} {source.LoaderVersion}, mods={source.Mods.Count}");
+            try
+            {
+                Log("INFO", "Scanning installed Java runtimes...");
+                await RefreshJavaRuntimesAsync(source.MinecraftVersion, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                Log("WARN", $"Could not scan Java runtimes: {exception.Message}");
+                RefreshJavaHint();
+            }
+            try
+            {
+                Log("INFO", "Refreshing available server cores...");
+                await RefreshCoreOptionsAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                Log("WARN", $"Could not refresh server cores automatically: {exception.Message}");
+                MessageBox.Show($"{App.Localization["server.core_none"]}\n\n{exception.Message}",
+                    App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -224,6 +552,7 @@ public partial class ServerView : UserControl
         catch (Exception exception)
         {
             Log("ERROR", exception.ToString());
+            SetStatus("server.ready");
             MessageBox.Show($"{App.Localization["server.dialog.read_failed"]}\n\n{exception.Message}",
                 App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -238,19 +567,23 @@ public partial class ServerView : UserControl
     {
         CleanupSource();
         _source = source;
+        _javaRuntimes.Clear();
+        _selectedJavaPath = string.Empty;
+        _recommendedJavaMajor = JavaRuntimeService.RecommendedMajorVersion(
+            source.MinecraftVersion,
+            source.Mods.Where(entry => entry.Selected && !entry.Disabled)
+                .SelectMany(entry => entry.JavaVersionRequirements));
         _readPath = Path.GetFullPath(inputPath);
+        _coreRows.Clear();
+        CoreCombo.SelectedItem = null;
         InputPathBox.Text = _readPath;
-        TargetVersionBox.Text = source.MinecraftVersion;
+        MinecraftVersionBox.Text = source.MinecraftVersion;
         LoaderBox.Text = source.LoaderType;
         LoaderVersionBox.Text = source.LoaderVersion;
-        OutputDirectoryBox.Text = source.InputKind == ServerInputKinds.Directory
-            ? source.SourcePath
-            : Path.GetDirectoryName(source.SourcePath) ?? string.Empty;
-
         _modRows.Clear();
         foreach (ServerModEntry mod in source.Mods)
         {
-            _modRows.Add(new ServerModRow(mod, InvalidatePreparation));
+            _modRows.Add(new ServerModRow(mod, ModSelectionChanged));
         }
         _worldRows.Clear();
         _worldRows.Add(new WorldRow(null, App.Localization["server.no_world"]));
@@ -259,6 +592,9 @@ public partial class ServerView : UserControl
             _worldRows.Add(new WorldRow(world, world.Name));
         }
         WorldCombo.SelectedIndex = 0;
+        JavaCombo.ItemsSource = _javaRuntimes;
+        JavaCombo.SelectedItem = null;
+        RefreshJavaHint();
         ConfigureOptionalDirectoryCheckBox(ConfigCheckBox, "config");
         ConfigureOptionalDirectoryCheckBox(DefaultConfigsCheckBox, "defaultconfigs");
         ConfigureOptionalDirectoryCheckBox(KubeJsCheckBox, "kubejs");
@@ -275,12 +611,11 @@ public partial class ServerView : UserControl
         bool available = _source?.OptionalDirectories.ContainsKey(key) == true;
         checkBox.IsEnabled = available;
         checkBox.IsChecked = available;
-        checkBox.Opacity = available ? 1 : 0.5;
     }
 
     private void InputPathBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_source is null)
+        if (_restoringMode || _source is null)
         {
             return;
         }
@@ -303,23 +638,10 @@ public partial class ServerView : UserControl
         }
     }
 
-    private void TargetVersionBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_source is null)
-        {
-            return;
-        }
-        InvalidatePreparation();
-        _coreRows.Clear();
-        LoaderVersionBox.Text = TargetVersionBox.Text.Trim().Equals(_source.MinecraftVersion, StringComparison.Ordinal)
-            ? _source.LoaderVersion
-            : string.Empty;
-        UpdateAutomaticOutputName(force: false);
-    }
-
     private void OutputNameBox_TextChanged(object? sender, TextChangedEventArgs e)
     {
-        if (!_suppressOutputNameChange && !OutputNameBox.Text.Equals(_lastAutomaticName, StringComparison.Ordinal))
+        if (!_restoringMode && !_suppressOutputNameChange &&
+            !OutputNameBox.Text.Equals(_lastAutomaticName, StringComparison.Ordinal))
         {
             _outputNameEdited = true;
         }
@@ -327,21 +649,41 @@ public partial class ServerView : UserControl
 
     private void SelectAllMods_Click(object sender, RoutedEventArgs e)
     {
-        foreach (ServerModRow row in _modRows)
+        _suppressModSelectionRefresh = true;
+        try
         {
-            row.Selected = !row.Entry.Disabled && row.Entry.ServerSupport != ServerSupportKinds.Unsupported;
+            foreach (ServerModRow row in _modRows)
+            {
+                row.Selected = !row.Entry.Disabled && row.Entry.ServerSupport != ServerSupportKinds.Unsupported;
+            }
         }
+        finally
+        {
+            _suppressModSelectionRefresh = false;
+        }
+        ModSelectionChanged();
     }
 
     private void ClearAllMods_Click(object sender, RoutedEventArgs e)
     {
-        foreach (ServerModRow row in _modRows)
+        _suppressModSelectionRefresh = true;
+        try
         {
-            row.Selected = false;
+            foreach (ServerModRow row in _modRows)
+            {
+                row.Selected = false;
+            }
         }
+        finally
+        {
+            _suppressModSelectionRefresh = false;
+        }
+        ModSelectionChanged();
     }
 
-    private void BrowseOutput_Click(object sender, RoutedEventArgs e)
+    private void BrowseOutput_Click(object sender, RoutedEventArgs e) => TryChooseOutputDirectory();
+
+    private bool TryChooseOutputDirectory()
     {
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
@@ -352,7 +694,9 @@ public partial class ServerView : UserControl
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
         {
             OutputDirectoryBox.Text = dialog.SelectedPath;
+            return true;
         }
+        return false;
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -375,6 +719,7 @@ public partial class ServerView : UserControl
 
     private async void DropZone_Drop(object sender, DragEventArgs e)
     {
+        e.Handled = true;
         DropZone.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         string? file = FirstDroppedFile(e.Data);
         if (!ArchiveMode || !IsSupportedArchive(file))
@@ -386,8 +731,6 @@ public partial class ServerView : UserControl
         InputPathBox.Text = file!;
         await ReadSourceAsync();
     }
-
-    private void DropZone_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => BrowseInput_Click(sender, e);
 
     private static string? FirstDroppedFile(IDataObject data)
     {
@@ -417,18 +760,32 @@ public partial class ServerView : UserControl
         BrowseInputButton.IsEnabled = !working;
         ReadButton.IsEnabled = !working;
         DropZone.IsEnabled = !working;
-        TargetVersionBox.IsEnabled = !working;
+        MinecraftVersionBox.IsEnabled = !working;
         CoreCombo.IsEnabled = !working;
         RefreshCoresButton.IsEnabled = !working && _source is not null;
+        JavaCombo.IsEnabled = !working && _javaRuntimes.Count > 0;
+        ChooseJavaButton.IsEnabled = !working;
         ModsGrid.IsEnabled = !working;
         SelectAllModsButton.IsEnabled = !working;
         ClearAllModsButton.IsEnabled = !working;
+        ConfigCheckBox.IsEnabled = !working && _source?.OptionalDirectories.ContainsKey("config") == true;
+        DefaultConfigsCheckBox.IsEnabled = !working && _source?.OptionalDirectories.ContainsKey("defaultconfigs") == true;
+        KubeJsCheckBox.IsEnabled = !working && _source?.OptionalDirectories.ContainsKey("kubejs") == true;
+        ScriptsCheckBox.IsEnabled = !working && _source?.OptionalDirectories.ContainsKey("scripts") == true;
+        WorldCombo.IsEnabled = !working && _source is not null;
+        BrowseOutputButton.IsEnabled = !working;
+        OutputDirectoryBox.IsEnabled = !working;
+        OutputNameBox.IsEnabled = !working;
         PrepareButton.IsEnabled = !working && _source is not null && PathsEqual(InputPathBox.Text, _readPath);
         BuildButton.IsEnabled = !working && PreparationIsCurrent();
         CancelButton.Visibility = working ? Visibility.Visible : Visibility.Collapsed;
         CancelButton.IsEnabled = working;
         OperationProgress.IsIndeterminate = working && indeterminate;
         OperationProgress.Value = working ? 0 : 1;
+        if (!working)
+        {
+            HideDownloadSpeed();
+        }
         if (statusKey is not null)
         {
             SetStatus(statusKey);
@@ -439,6 +796,49 @@ public partial class ServerView : UserControl
     {
         _statusKey = key;
         StatusText.Text = App.Localization[key];
+    }
+
+    private void UpdateDownloadSpeed(DownloadTransferProgress progress)
+    {
+        _downloadActive = _working && progress.IsActive &&
+            double.IsFinite(progress.BytesPerSecond) && progress.BytesPerSecond > 0;
+        _downloadBytesPerSecond = _downloadActive ? progress.BytesPerSecond : 0;
+        RefreshDownloadSpeed();
+    }
+
+    private void HideDownloadSpeed()
+    {
+        _downloadActive = false;
+        _downloadBytesPerSecond = 0;
+        RefreshDownloadSpeed();
+    }
+
+    private void RefreshDownloadSpeed()
+    {
+        if (!_downloadActive)
+        {
+            DownloadSpeedText.Text = string.Empty;
+            DownloadSpeedText.Visibility = Visibility.Hidden;
+            return;
+        }
+
+        DownloadSpeedText.Text = App.Localization.Translate(
+            "server.download_speed", FormatDownloadSpeed(_downloadBytesPerSecond));
+        DownloadSpeedText.Visibility = Visibility.Visible;
+    }
+
+    private static string FormatDownloadSpeed(double bytesPerSecond)
+    {
+        string[] units = ["B/s", "KB/s", "MB/s", "GB/s"];
+        double value = Math.Max(0, bytesPerSecond);
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+        string format = value >= 100 ? "0" : "0.0";
+        return $"{value.ToString(format, CultureInfo.InvariantCulture)} {units[unit]}";
     }
 
     private CancellationToken BeginOperation()
@@ -465,9 +865,10 @@ public partial class ServerView : UserControl
 
     private string CurrentSnapshot() => string.Join('\u001f',
         _readPath,
-        TargetVersionBox.Text.Trim(),
-        LoaderBox.Text.Trim(),
-        LoaderVersionBox.Text.Trim(),
+        _source?.MinecraftVersion ?? string.Empty,
+        _source?.LoaderType ?? string.Empty,
+        _source?.LoaderVersion ?? string.Empty,
+        _selectedJavaPath,
         string.Join(',', _modRows.Select(ModSnapshot)));
 
     private static string ModSnapshot(ServerModRow row)
@@ -498,7 +899,7 @@ public partial class ServerView : UserControl
         string generated = MigrationView.GenerateOutputPackName(
             _source.DisplayName,
             _source.MinecraftVersion,
-            TargetVersionBox.Text.Trim());
+            _source.MinecraftVersion);
         _suppressOutputNameChange = true;
         OutputNameBox.Text = generated;
         _suppressOutputNameChange = false;
@@ -527,9 +928,11 @@ public partial class ServerView : UserControl
     private void Localization_LanguageChanged(object? sender, EventArgs e)
     {
         ApplySourceMode();
+        ApplyJavaLocalization();
         RefreshLocalizedRows();
         RefreshOverview();
         StatusText.Text = App.Localization[_statusKey];
+        RefreshDownloadSpeed();
     }
 
     private void RefreshLocalizedRows()
@@ -544,32 +947,28 @@ public partial class ServerView : UserControl
         }
     }
 
-    private void ClearLoadedState(bool clearInput)
-    {
-        CleanupSource();
-        _source = null;
-        _readPath = string.Empty;
-        _modRows.Clear();
-        _coreRows.Clear();
-        _worldRows.Clear();
-        OverviewBox.Clear();
-        TargetVersionBox.Clear();
-        LoaderBox.Clear();
-        LoaderVersionBox.Clear();
-        if (clearInput)
-        {
-            InputPathBox.Clear();
-        }
-        PrepareButton.IsEnabled = false;
-        InvalidatePreparation();
-    }
-
     private void CleanupSource()
     {
         if (_source is not null)
         {
             DisposeSource(_source);
         }
+    }
+
+    private void CleanupAllSources()
+    {
+        ServerPackSource? directorySource = _directoryState.Source;
+        ServerPackSource? archiveSource = _archiveState.Source;
+        if (directorySource is not null)
+        {
+            DisposeSource(directorySource);
+        }
+        if (archiveSource is not null && !ReferenceEquals(archiveSource, directorySource))
+        {
+            DisposeSource(archiveSource);
+        }
+        _directoryState.Source = null;
+        _archiveState.Source = null;
     }
 
     private static void DisposeSource(ServerPackSource source)
@@ -623,6 +1022,35 @@ public partial class ServerView : UserControl
         }
     }
 
+    private sealed class ModeState
+    {
+        public ObservableCollection<ServerModRow> ModRows { get; } = [];
+        public ObservableCollection<CoreRow> CoreRows { get; } = [];
+        public ObservableCollection<WorldRow> WorldRows { get; } = [];
+        public ObservableCollection<JavaRuntimeInfo> JavaRuntimes { get; } = [];
+        public ServerPackSource? Source { get; set; }
+        public string ReadPath { get; set; } = string.Empty;
+        public string InputPath { get; set; } = string.Empty;
+        public string MinecraftVersion { get; set; } = string.Empty;
+        public string Loader { get; set; } = string.Empty;
+        public string LoaderVersion { get; set; } = string.Empty;
+        public string OutputDirectory { get; set; } = string.Empty;
+        public string OutputName { get; set; } = string.Empty;
+        public string LastAutomaticName { get; set; } = string.Empty;
+        public string PreparedSnapshot { get; set; } = string.Empty;
+        public string StatusKey { get; set; } = "server.ready";
+        public string LogText { get; set; } = string.Empty;
+        public bool OutputNameEdited { get; set; }
+        public bool IncludeConfig { get; set; }
+        public bool IncludeDefaultConfigs { get; set; }
+        public bool IncludeKubeJs { get; set; }
+        public bool IncludeScripts { get; set; }
+        public CoreRow? SelectedCore { get; set; }
+        public WorldRow? SelectedWorld { get; set; }
+        public string SelectedJavaPath { get; set; } = string.Empty;
+        public int RecommendedJavaMajor { get; set; } = 21;
+    }
+
     private sealed class ServerModRow : INotifyPropertyChanged
     {
         private readonly Action _changed;
@@ -640,9 +1068,7 @@ public partial class ServerView : UserControl
 
         public ServerModEntry Entry { get; }
         public string Name => Entry.Name;
-        public string RelativePath => Entry.ContentItem?.TargetFileName is { Length: > 0 } target
-            ? target
-            : Entry.RelativePath.Length > 0
+        public string RelativePath => Entry.RelativePath.Length > 0
                 ? Entry.RelativePath
                 : Entry.ContentItem?.FileName ?? string.Empty;
         public string Support { get => _support; private set => Set(ref _support, value); }

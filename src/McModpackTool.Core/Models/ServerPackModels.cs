@@ -16,8 +16,20 @@ public static class ServerModOrigins
 public static class ServerSupportKinds
 {
     public const string Recommended = "recommended";
+    public const string Optional = "optional";
     public const string Unsupported = "unsupported";
     public const string Unknown = "unknown";
+}
+
+public enum ServerBuildPhase
+{
+    DownloadingCore,
+    CopyingMods,
+    DownloadingMods,
+    CopyingConfiguration,
+    CopyingWorld,
+    WritingLaunchFiles,
+    CompressingArchive,
 }
 
 public sealed class ServerModEntry
@@ -28,9 +40,9 @@ public sealed class ServerModEntry
     public string Origin { get; set; } = ServerModOrigins.Local;
     public string ServerSupport { get; set; } = ServerSupportKinds.Unknown;
     public string SupportReason { get; set; } = string.Empty;
+    public List<string> JavaVersionRequirements { get; } = [];
     public bool Selected { get; set; } = true;
     public bool Disabled { get; set; }
-    public bool Migratable { get; set; }
     public ContentItem? ContentItem { get; set; }
 }
 
@@ -80,9 +92,6 @@ public sealed class GameDirectoryDiscovery
 public sealed class ServerBuildRequest
 {
     public required ServerPackSource Source { get; init; }
-    public required string TargetMinecraftVersion { get; init; }
-    public required string TargetLoaderType { get; init; }
-    public required string TargetLoaderVersion { get; init; }
     public required string CoreId { get; init; }
     public required string OutputPath { get; init; }
     public bool IncludeConfig { get; init; }

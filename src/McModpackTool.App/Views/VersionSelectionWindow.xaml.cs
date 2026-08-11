@@ -1,5 +1,6 @@
 using System.Windows;
-using System.Windows.Input;
+using McModpackTool.App.Services;
+using McModpackTool.App.UI;
 using McModpackTool.Core.Models;
 
 namespace McModpackTool.App.Views;
@@ -12,6 +13,14 @@ public partial class VersionSelectionWindow : Window
         DataContext = App.Localization;
         VersionCombo.ItemsSource = candidates;
         VersionCombo.SelectedIndex = 0;
+        SourceInitialized += (_, _) =>
+        {
+            bool dark = App.Settings.Theme == "dark" || App.Settings.Theme == "system" && ThemeService.IsSystemDark();
+            if (WindowEffects.Apply(this, dark))
+                Background = System.Windows.Media.Brushes.Transparent;
+            else
+                SetResourceReference(BackgroundProperty, "AppBackgroundBrush");
+        };
     }
 
     public ServerVersionCandidate? SelectedCandidate { get; private set; }
@@ -41,11 +50,4 @@ public partial class VersionSelectionWindow : Window
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 
-    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.LeftButton == MouseButtonState.Pressed)
-        {
-            DragMove();
-        }
-    }
 }

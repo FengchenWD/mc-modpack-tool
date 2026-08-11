@@ -507,6 +507,20 @@ public partial class MigrationView : UserControl
         if (name.Length == 0) return target.Length == 0 ? newPack : $"{target} {newPack}";
         if (target.Length == 0) return name;
 
+        // A pack name may already carry the requested target version even when
+        // the manifest reports a different source version.  Detect that case
+        // before trying to replace the source token so we do not append a
+        // duplicate migration suffix or version.
+        var leadingVersion = Regex.Match(
+            name,
+            @"^(?<prefix>\s*)(?<version>\d+\.\d+(?:\.\d+)?)(?=$|[\s_-])",
+            RegexOptions.CultureInvariant);
+        if (leadingVersion.Success &&
+            string.Equals(leadingVersion.Groups["version"].Value, target, StringComparison.OrdinalIgnoreCase))
+        {
+            return name;
+        }
+
         string candidate = name;
         bool replaced = false;
         if (source.Length > 0)
@@ -515,7 +529,7 @@ public partial class MigrationView : UserControl
             candidate = pattern.Replace(name, target, 1);
             replaced = !string.Equals(candidate, name, StringComparison.Ordinal);
         }
-        else
+        if (!replaced)
         {
             var match = Regex.Match(name, @"^(?<prefix>\s*)(?<version>\d+\.\d+(?:\.\d+)?)(?=$|[\s_-])", RegexOptions.CultureInvariant);
             if (match.Success)

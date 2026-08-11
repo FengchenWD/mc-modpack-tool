@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="CoreApiRunner.cs" />
+    <Reference Include="McModpackTool.Core.Tests">
+      <HintPath>McModpackTool.Core.Tests/bin/Debug/net10.0/McModpackTool.Core.Tests.dll</HintPath>
+    </Reference>
+    <Reference Include="McModpackTool.Core">
+      <HintPath>../src/McModpackTool.Core/bin/Debug/net10.0/McModpackTool.Core.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

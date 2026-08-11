@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -22,6 +23,12 @@ public sealed record ArchiveSafetyOptions
 
     public static ArchiveSafetyOptions Default { get; } = new();
 }
+
+public sealed record DownloadTransferProgress(
+    long BytesReceived,
+    long TotalBytes,
+    double BytesPerSecond,
+    bool IsActive);
 
 public static class ArchiveSafety
 {
@@ -329,7 +336,8 @@ public static class ArchiveSafety
         long expectedSize = 0,
         IReadOnlyDictionary<string, string>? expectedHashes = null,
         ArchiveSafetyOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<DownloadTransferProgress>? transferProgress = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         options ??= ArchiveSafetyOptions.Default;
@@ -344,6 +352,9 @@ public static class ArchiveSafety
         }
 
         string temporary = string.Empty;
+        long transferredBytes = 0;
+        long transferTotalBytes = 0;
+        bool transferStarted = false;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -373,6 +384,7 @@ public static class ArchiveSafety
             {
                 return false;
             }
+            transferTotalBytes = contentLength ?? expectedSize;
 
             fileName = ResolveDownloadFileName(response, url, fileName, suffix);
             Directory.CreateDirectory(destinationDirectory);
@@ -399,6 +411,11 @@ public static class ArchiveSafety
                     FileOptions.Asynchronous | FileOptions.SequentialScan);
                 var buffer = new byte[128 * 1024];
                 long size = 0;
+                var stopwatch = Stopwatch.StartNew();
+                long lastReportedBytes = 0;
+                TimeSpan lastReportTime = TimeSpan.Zero;
+                transferStarted = true;
+                transferProgress?.Report(new DownloadTransferProgress(0, transferTotalBytes, 0, true));
                 while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -409,6 +426,7 @@ public static class ArchiveSafety
                     }
 
                     size += read;
+                    transferredBytes = size;
                     if (size > options.MaxDownloadBytes || (expectedSize > 0 && size > expectedSize))
                     {
                         return false;
@@ -419,6 +437,28 @@ public static class ArchiveSafety
                     {
                         hasher.AppendData(buffer, 0, read);
                     }
+
+                    TimeSpan elapsed = stopwatch.Elapsed;
+                    TimeSpan sampleDuration = elapsed - lastReportTime;
+                    if (sampleDuration >= TimeSpan.FromMilliseconds(250))
+                    {
+                        double bytesPerSecond = (size - lastReportedBytes) / sampleDuration.TotalSeconds;
+                        transferProgress?.Report(new DownloadTransferProgress(
+                            size, transferTotalBytes, bytesPerSecond, true));
+                        lastReportedBytes = size;
+                        lastReportTime = elapsed;
+                    }
+                }
+
+                TimeSpan finalElapsed = stopwatch.Elapsed;
+                TimeSpan finalSampleDuration = finalElapsed - lastReportTime;
+                if (size > lastReportedBytes && finalSampleDuration > TimeSpan.Zero)
+                {
+                    transferProgress?.Report(new DownloadTransferProgress(
+                        size,
+                        transferTotalBytes,
+                        (size - lastReportedBytes) / finalSampleDuration.TotalSeconds,
+                        true));
                 }
 
                 await output.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -465,6 +505,11 @@ public static class ArchiveSafety
         }
         finally
         {
+            if (transferStarted)
+            {
+                transferProgress?.Report(new DownloadTransferProgress(
+                    transferredBytes, transferTotalBytes, 0, false));
+            }
             if (temporary.Length > 0)
             {
                 TryDeleteFile(temporary);

@@ -583,7 +583,6 @@ public static class GameDirectoryScanner
                 SupportReason = reason,
                 Selected = !disabled && support != ServerSupportKinds.Unsupported,
                 Disabled = disabled,
-                Migratable = false,
                 ContentItem = new ContentItem
                 {
                     Name = Path.GetFileName(file.RelativePath),

@@ -16,9 +16,8 @@
                 <TextBlock Style="{StaticResource PageSubtitleStyle}" Text="{Binding [home.subtitle]}" />
             </StackPanel>
 
-            <Grid Grid.Row="1" Margin="0,30,0,18">
-                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Margin="0,0,8,0" Padding="0" Style="{StaticResource FluentButtonStyle}" Click="Migration_Click">
+            <UniformGrid Grid.Row="1" Margin="0,30,0,18" Columns="3">
+                <Button x:Name="MigrationHomeButton" Margin="0,0,7,0" Padding="0" Style="{StaticResource FluentButtonStyle}" Click="Migration_Click">
                     <Border Style="{StaticResource CardStyle}" Padding="24" MinHeight="168">
                         <Grid>
                             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -28,7 +27,17 @@
                         </Grid>
                     </Border>
                 </Button>
-                <Button Grid.Column="1" Margin="8,0,0,0" Padding="0" Style="{StaticResource FluentButtonStyle}" Click="Server_Click">
+                <Button x:Name="ClientPackHomeButton" Margin="7,0" Padding="0" Style="{StaticResource FluentButtonStyle}" Click="ClientPack_Click">
+                    <Border Style="{StaticResource CardStyle}" Padding="24" MinHeight="168">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                            <TextBlock FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{DynamicResource AccentBrush}" Text="&#xE7B8;" />
+                            <TextBlock Grid.Row="1" Margin="0,18,0,7" FontSize="18" FontWeight="SemiBold" Text="{Binding [home.client_pack]}" />
+                            <TextBlock Grid.Row="2" Style="{StaticResource HintStyle}" Text="{Binding [home.client_pack.desc]}" />
+                        </Grid>
+                    </Border>
+                </Button>
+                <Button x:Name="ServerHomeButton" Margin="7,0,0,0" Padding="0" Style="{StaticResource FluentButtonStyle}" Click="Server_Click">
                     <Border Style="{StaticResource CardStyle}" Padding="24" MinHeight="168">
                         <Grid>
                             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -38,7 +47,7 @@
                         </Grid>
                     </Border>
                 </Button>
-            </Grid>
+            </UniformGrid>
 
             <Border Grid.Row="2" Background="{DynamicResource AccentSoftBrush}" CornerRadius="8" Padding="22" VerticalAlignment="Top">
                 <Grid>

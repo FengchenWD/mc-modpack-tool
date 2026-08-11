@@ -46,7 +46,7 @@
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid Margin="22,8,22,12" MaxWidth="1180" HorizontalAlignment="Center">
+            <Grid Margin="22,8,22,12" MaxWidth="1180" HorizontalAlignment="Stretch">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -89,7 +89,7 @@
                         <Border x:Name="DropZone" Margin="0,10,0,0" Padding="14,9" CornerRadius="7" Visibility="Collapsed"
                                 Background="{DynamicResource SurfaceAltBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                                 AllowDrop="True" DragEnter="DropZone_DragEnter" DragLeave="DropZone_DragLeave"
-                                DragOver="DropZone_DragOver" Drop="DropZone_Drop" MouseLeftButtonUp="DropZone_MouseLeftButtonUp" Cursor="Hand">
+                                DragOver="DropZone_DragOver" Drop="DropZone_Drop">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="38" /><ColumnDefinition /></Grid.ColumnDefinitions>
                                 <TextBlock FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="{DynamicResource AccentBrush}"
@@ -117,22 +117,43 @@
                     <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="5,0,0,0" Padding="14">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <TextBlock Grid.ColumnSpan="3" Style="{StaticResource SectionTitleStyle}" Text="{Binding [server.environment]}" />
-                            <TextBlock Grid.Row="1" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.target_version]}" />
-                            <TextBox x:Name="TargetVersionBox" Grid.Row="1" Grid.Column="1" Margin="0,8,8,0"
-                                     TextChanged="TargetVersionBox_TextChanged" />
+                            <TextBlock Grid.Row="1" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.minecraft]}" />
+                            <TextBox x:Name="MinecraftVersionBox" Grid.Row="1" Grid.Column="1" Margin="0,8,8,0"
+                                     IsReadOnly="True" />
                             <TextBlock x:Name="VersionModeHint" Grid.Row="2" Grid.ColumnSpan="3" Margin="0,5,0,2"
-                                       Style="{StaticResource HintStyle}" Text="{Binding [server.directory_version_hint]}" />
+                                       Style="{StaticResource HintStyle}" Text="{Binding [server.version_hint]}" />
                             <TextBlock Grid.Row="3" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.loader]}" />
                             <TextBox x:Name="LoaderBox" Grid.Row="3" Grid.Column="1" Margin="0,8,8,0" IsReadOnly="True" />
                             <TextBox x:Name="LoaderVersionBox" Grid.Row="3" Grid.Column="2" Width="150" Margin="0,8,0,0" IsReadOnly="True" />
-                            <TextBlock Grid.Row="4" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.core]}" />
-                            <ComboBox x:Name="CoreCombo" Grid.Row="4" Grid.Column="1" Margin="0,8,8,0" DisplayMemberPath="DisplayName" />
-                            <Button x:Name="RefreshCoresButton" Grid.Row="4" Grid.Column="2" Margin="0,8,0,0"
+                            <TextBlock Grid.Row="4" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.java]}" />
+                            <ComboBox x:Name="JavaCombo" Grid.Row="4" Grid.Column="1" Margin="0,8,8,0"
+                                      SelectionChanged="JavaCombo_SelectionChanged"
+                                      MinHeight="34" MaxDropDownHeight="300">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextBrush}"
+                                                   ToolTip="{Binding ExecutablePath}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button x:Name="ChooseJavaButton" Grid.Row="4" Grid.Column="2" Margin="0,8,0,0"
+                                    Style="{StaticResource FluentButtonStyle}" Click="ChooseJava_Click" />
+                            <TextBlock x:Name="JavaHintText" Grid.Row="5" Grid.ColumnSpan="3" Margin="0,5,0,2"
+                                       Style="{StaticResource HintStyle}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="6" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.core]}" />
+                            <ComboBox x:Name="CoreCombo" Grid.Row="6" Grid.Column="1" Margin="0,8,8,0" DisplayMemberPath="DisplayName" />
+                            <Button x:Name="RefreshCoresButton" Grid.Row="6" Grid.Column="2" Margin="0,8,0,0"
                                     Style="{StaticResource FluentButtonStyle}" Click="RefreshCores_Click" Content="{Binding [server.core_refresh]}" />
                         </Grid>
                     </Border>
@@ -151,7 +172,10 @@
                         <DataGrid x:Name="ModsGrid" Grid.Row="1" Margin="0,9,0,0" AutoGenerateColumns="False" IsReadOnly="False"
                                   CanUserResizeColumns="True" SelectionMode="Single">
                             <DataGrid.Columns>
-                                <DataGridCheckBoxColumn Width="46" Binding="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <DataGridCheckBoxColumn Width="46"
+                                                        ElementStyle="{StaticResource DataGridCheckBoxStyle}"
+                                                        EditingElementStyle="{StaticResource DataGridEditingCheckBoxStyle}"
+                                                        Binding="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                 <DataGridTextColumn Width="2*" IsReadOnly="True" Header="{Binding [server.mod_name], Source={x:Static app:App.Localization}}" Binding="{Binding Name}" />
                                 <DataGridTextColumn Width="1.5*" IsReadOnly="True" Header="{Binding [server.mod_path], Source={x:Static app:App.Localization}}" Binding="{Binding RelativePath}" />
                                 <DataGridTextColumn Width="130" IsReadOnly="True" Header="{Binding [server.mod_support], Source={x:Static app:App.Localization}}" Binding="{Binding Support}" />
@@ -184,7 +208,7 @@
                             <TextBlock Grid.ColumnSpan="3" Style="{StaticResource SectionTitleStyle}" Text="{Binding [server.output]}" />
                             <TextBlock Grid.Row="1" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.output_dir]}" />
                             <TextBox x:Name="OutputDirectoryBox" Grid.Row="1" Grid.Column="1" Margin="0,8,8,0" />
-                            <Button Grid.Row="1" Grid.Column="2" Margin="0,8,0,0" Style="{StaticResource FluentButtonStyle}"
+                            <Button x:Name="BrowseOutputButton" Grid.Row="1" Grid.Column="2" Margin="0,8,0,0" Style="{StaticResource FluentButtonStyle}"
                                     Click="BrowseOutput_Click" Content="{Binding [server.browse]}" />
                             <TextBlock Grid.Row="2" Margin="0,10,10,0" VerticalAlignment="Center" Text="{Binding [server.output_name]}" />
                             <TextBox x:Name="OutputNameBox" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0" />
@@ -205,14 +229,16 @@
         <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,1,0,0" Padding="22,10">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="174" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="{Binding [server.ready]}" />
                 <ProgressBar x:Name="OperationProgress" Grid.Column="1" Height="5" Margin="18,0" VerticalAlignment="Center" Minimum="0" Maximum="1" />
-                <Button x:Name="CancelButton" Grid.Column="2" Margin="0,0,9,0" Style="{StaticResource FluentButtonStyle}"
+                <TextBlock x:Name="DownloadSpeedText" Grid.Column="2" Margin="0,0,14,0" VerticalAlignment="Center"
+                           TextAlignment="Right" Visibility="Hidden" />
+                <Button x:Name="CancelButton" Grid.Column="3" Margin="0,0,9,0" Style="{StaticResource FluentButtonStyle}"
                         Visibility="Collapsed" IsEnabled="False" Click="Cancel_Click" Content="{Binding [common.cancel]}" />
-                <Button x:Name="PrepareButton" Grid.Column="3" Margin="0,0,9,0" Style="{StaticResource FluentButtonStyle}"
+                <Button x:Name="PrepareButton" Grid.Column="4" Margin="0,0,9,0" Style="{StaticResource FluentButtonStyle}"
                         IsEnabled="False" Click="Prepare_Click" Content="{Binding [server.prepare]}" />
-                <Button x:Name="BuildButton" Grid.Column="4" Style="{StaticResource PrimaryButtonStyle}"
+                <Button x:Name="BuildButton" Grid.Column="5" Style="{StaticResource PrimaryButtonStyle}"
                         IsEnabled="False" Click="Build_Click" Content="{Binding [server.build]}" />
             </Grid>
         </Border>

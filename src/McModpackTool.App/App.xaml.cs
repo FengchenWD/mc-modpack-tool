@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using System.Windows.Input;
+using System.Diagnostics;
 using McModpackTool.App.Services;
 using McModpackTool.App.UI;
 using McModpackTool.App.Views;
@@ -57,11 +58,15 @@ public partial class App : Application
 
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        MessageBox.Show(
-            Localization.Translate("app.unhandled_error", e.Exception.Message),
-            Localization["app.name"],
-            MessageBoxButton.OK,
-            MessageBoxImage.Error);
+        string message = Localization.Translate("app.unhandled_error", e.Exception.Message);
+        try
+        {
+            MessageBox.Show(message, Localization["app.name"], MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch (Exception dialogException)
+        {
+            Debug.WriteLine($"Could not display the application error dialog: {dialogException}");
+        }
         e.Handled = true;
         Application.Current?.Shutdown(-1);
     }

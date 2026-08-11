@@ -231,8 +231,8 @@ public sealed class ServerArchiveSourceReader
                 ? value
                 : string.Empty;
             var unsupported = serverEnvironment.Equals("unsupported", StringComparison.OrdinalIgnoreCase);
-            var supported = serverEnvironment.Equals("required", StringComparison.OrdinalIgnoreCase) ||
-                serverEnvironment.Equals("optional", StringComparison.OrdinalIgnoreCase);
+            var optional = serverEnvironment.Equals("optional", StringComparison.OrdinalIgnoreCase);
+            var required = serverEnvironment.Equals("required", StringComparison.OrdinalIgnoreCase);
             yield return new ServerModEntry
             {
                 Name = item.Name,
@@ -240,13 +240,20 @@ public sealed class ServerArchiveSourceReader
                 Origin = ServerModOrigins.Manifest,
                 ServerSupport = unsupported
                     ? ServerSupportKinds.Unsupported
-                    : supported
-                        ? ServerSupportKinds.Recommended
-                        : ServerSupportKinds.Unknown,
-                SupportReason = unsupported ? "整合包声明该项目不支持服务端。" : string.Empty,
-                Selected = !item.Disabled && !unsupported,
+                    : optional
+                        ? ServerSupportKinds.Optional
+                        : required
+                            ? ServerSupportKinds.Recommended
+                            : ServerSupportKinds.Unknown,
+                SupportReason = unsupported
+                    ? "整合包声明该项目不支持服务端。"
+                    : optional
+                        ? "整合包声明该项目可选安装于服务端。"
+                        : required
+                            ? "整合包声明该项目为服务端必需。"
+                            : string.Empty,
+                Selected = !item.Disabled && !unsupported && !optional,
                 Disabled = item.Disabled,
-                Migratable = true,
                 ContentItem = item,
             };
         }
@@ -295,7 +302,6 @@ public sealed class ServerArchiveSourceReader
                 SupportReason = reason,
                 Selected = !disabled && support != ServerSupportKinds.Unsupported,
                 Disabled = disabled,
-                Migratable = false,
             });
         }
 

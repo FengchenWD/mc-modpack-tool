@@ -129,6 +129,65 @@ public sealed class ModrinthClient : IDisposable
         }
     }
 
+    public async Task<IReadOnlyDictionary<string, ModrinthVersion>> LookupByHashesAsync(
+        IEnumerable<string> hashes,
+        string algorithm = "sha1",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(hashes);
+        var normalized = hashes
+            .Where(hash => !string.IsNullOrWhiteSpace(hash))
+            .Select(hash => hash.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var result = new Dictionary<string, ModrinthVersion>(StringComparer.OrdinalIgnoreCase);
+        foreach (var batch in normalized.Chunk(100))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var versions = await PostAsync<Dictionary<string, ModrinthVersion>>(
+                "/version_files",
+                new VersionFilesRequest { Hashes = batch, Algorithm = algorithm },
+                cancellationToken).ConfigureAwait(false) ?? [];
+            foreach (var (hash, version) in versions)
+            {
+                result[hash] = version;
+            }
+        }
+        return result;
+    }
+
+    public async Task<IReadOnlyDictionary<string, ModrinthProject>> GetProjectsByIdsAsync(
+        IEnumerable<string> projectIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(projectIds);
+        var normalized = projectIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var result = new Dictionary<string, ModrinthProject>(StringComparer.OrdinalIgnoreCase);
+        foreach (var batch in normalized.Chunk(50))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var projects = await GetAsync<List<ModrinthProject>>(
+                "/projects",
+                new Dictionary<string, string>
+                {
+                    ["ids"] = JsonSerializer.Serialize(batch, JsonOptions),
+                },
+                cancellationToken).ConfigureAwait(false) ?? [];
+            foreach (var project in projects)
+            {
+                if (project.EffectiveId.Length > 0)
+                {
+                    result[project.EffectiveId] = project;
+                }
+            }
+        }
+        return result;
+    }
+
     public static ModrinthVersion? PickBestVersion(IEnumerable<ModrinthVersion> versions)
     {
         ArgumentNullException.ThrowIfNull(versions);
@@ -242,6 +301,70 @@ public sealed class ModrinthClient : IDisposable
         }
     }
 
+    private async Task<T?> PostAsync<T>(
+        string endpoint,
+        object body,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, BuildUri(endpoint, null))
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(body, JsonOptions),
+                Encoding.UTF8,
+                "application/json"),
+        };
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        request.Headers.TryAddWithoutValidation("User-Agent", _userAgent);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_requestTimeout);
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new PlatformApiException("Modrinth", "Modrinth API request timed out.", null, exception);
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new PlatformApiException(
+                "Modrinth", "Unable to connect to the Modrinth API.", exception.StatusCode, exception);
+        }
+
+        using (response)
+        {
+            if ((int)response.StatusCode == 429)
+            {
+                throw new PlatformApiException(
+                    "Modrinth", "Modrinth API rate limit exceeded (429).", response.StatusCode);
+            }
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                throw new PlatformApiException(
+                    "Modrinth", $"Modrinth API returned HTTP {(int)response.StatusCode}.", response.StatusCode);
+            }
+            try
+            {
+                await using var stream = await response.Content
+                    .ReadAsStreamAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                return await JsonSerializer.DeserializeAsync<T>(
+                    stream,
+                    JsonOptions,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (JsonException exception)
+            {
+                throw new PlatformApiException(
+                    "Modrinth", "Modrinth API returned invalid JSON.", response.StatusCode, exception);
+            }
+        }
+    }
+
     private static Uri BuildUri(string endpoint, IReadOnlyDictionary<string, string>? parameters)
     {
         var builder = new StringBuilder(BaseAddress).Append(endpoint);
@@ -264,5 +387,14 @@ public sealed class ModrinthClient : IDisposable
     {
         [JsonPropertyName("hits")]
         public List<ModrinthProject> Hits { get; set; } = [];
+    }
+
+    private sealed class VersionFilesRequest
+    {
+        [JsonPropertyName("hashes")]
+        public required string[] Hashes { get; init; }
+
+        [JsonPropertyName("algorithm")]
+        public required string Algorithm { get; init; }
     }
 }

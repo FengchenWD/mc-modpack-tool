@@ -92,14 +92,11 @@ public partial class SettingsView : UserControl
 
     private async void CustomColor_Click(object sender, RoutedEventArgs e)
     {
-        using var dialog = new System.Windows.Forms.ColorDialog
+        string? color = ColorPickerWindow.Pick(Window.GetWindow(this), App.Settings.AccentColor);
+        if (color is not null)
         {
-            FullOpen = true,
-            AnyColor = true,
-            Color = System.Drawing.ColorTranslator.FromHtml(App.Settings.AccentColor)
-        };
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            await ApplyAccentAsync($"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}");
+            await ApplyAccentAsync(color);
+        }
     }
 
     private async void ResetColor_Click(object sender, RoutedEventArgs e) => await ApplyAccentAsync("#167D6A");

@@ -49,6 +49,9 @@ public sealed class CurseForgeFile
     [JsonPropertyName("modId")]
     public long ModId { get; set; }
 
+    [JsonPropertyName("fileFingerprint")]
+    public uint FileFingerprint { get; set; }
+
     [JsonPropertyName("displayName")]
     public string DisplayName { get; set; } = string.Empty;
 
@@ -111,6 +114,12 @@ public sealed class ModrinthProject
 
     [JsonPropertyName("project_type")]
     public string ProjectType { get; set; } = string.Empty;
+
+    [JsonPropertyName("client_side")]
+    public string ClientSide { get; set; } = string.Empty;
+
+    [JsonPropertyName("server_side")]
+    public string ServerSide { get; set; } = string.Empty;
 
     [JsonIgnore]
     public string EffectiveId => string.IsNullOrWhiteSpace(ProjectId) ? Id : ProjectId;

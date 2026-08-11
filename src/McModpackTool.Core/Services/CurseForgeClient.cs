@@ -180,6 +180,44 @@ public sealed class CurseForgeClient : IDisposable
             cancellationToken);
     }
 
+    /// <summary>
+    /// Resolves only CurseForge's exact content fingerprints. No project-name search is used.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<uint, CurseForgeFile>> LookupByFingerprintsAsync(
+        IEnumerable<uint> fingerprints,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprints);
+        uint[] normalized = fingerprints.Distinct().ToArray();
+        var result = new Dictionary<uint, CurseForgeFile>();
+        foreach (uint[] batch in normalized.Chunk(1000))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            FingerprintMatchesResponse response = await PostAsync<FingerprintMatchesResponse>(
+                $"/fingerprints/{MinecraftGameId.ToString(CultureInfo.InvariantCulture)}",
+                new FingerprintsRequest { Fingerprints = batch },
+                cancellationToken).ConfigureAwait(false)
+                ?? throw UnexpectedData("CurseForge fingerprint API returned an unexpected response.");
+
+            for (int index = 0; index < response.ExactMatches.Count; index++)
+            {
+                CurseForgeFile? file = response.ExactMatches[index].File;
+                if (file is null || file.Id <= 0 || file.ModId <= 0)
+                {
+                    continue;
+                }
+
+                uint fingerprint = file.FileFingerprint;
+                if (fingerprint == 0 && index < response.ExactFingerprints.Count)
+                {
+                    fingerprint = response.ExactFingerprints[index];
+                }
+                result[fingerprint] = file;
+            }
+        }
+        return result;
+    }
+
     public async Task<CurseForgeFile?> FindTargetFileAsync(
         long projectId,
         string targetMinecraft,
@@ -409,5 +447,26 @@ public sealed class CurseForgeClient : IDisposable
     {
         [JsonPropertyName("modIds")]
         public long[] ModIds { get; set; } = [];
+    }
+
+    private sealed class FingerprintsRequest
+    {
+        [JsonPropertyName("fingerprints")]
+        public uint[] Fingerprints { get; set; } = [];
+    }
+
+    private sealed class FingerprintMatchesResponse
+    {
+        [JsonPropertyName("exactMatches")]
+        public List<FingerprintMatch> ExactMatches { get; set; } = [];
+
+        [JsonPropertyName("exactFingerprints")]
+        public List<uint> ExactFingerprints { get; set; } = [];
+    }
+
+    private sealed class FingerprintMatch
+    {
+        [JsonPropertyName("file")]
+        public CurseForgeFile? File { get; set; }
     }
 }

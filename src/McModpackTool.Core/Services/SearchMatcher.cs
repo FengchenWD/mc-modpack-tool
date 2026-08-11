@@ -108,6 +108,12 @@ public static partial class SearchMatcher
         {
             return false;
         }
+        if (!item.SourceDependencyStateCaptured)
+        {
+            item.SourceDependencies = item.TargetDependencies.ToList();
+            item.SourceDependencyMetadataAvailable = item.DependencyMetadataAvailable;
+            item.SourceDependencyStateCaptured = true;
+        }
 
         item.PreserveOriginal = true;
         item.Status = "preserved";
@@ -118,6 +124,8 @@ public static partial class SearchMatcher
         item.TargetHashes = new Dictionary<string, string>(item.Hashes, StringComparer.OrdinalIgnoreCase);
         item.TargetVersionId = item.VersionId;
         item.TargetVersionNumber = string.Empty;
+        item.TargetDependencies = item.SourceDependencies.ToList();
+        item.DependencyMetadataAvailable = item.SourceDependencyMetadataAvailable;
         return true;
     }
 
@@ -832,6 +840,12 @@ public sealed class ContentTargetResolver
 
         item.Source = item.OriginalSource;
         item.ProjectId = item.OriginalProjectId;
+        if (!item.SourceDependencyStateCaptured)
+        {
+            item.SourceDependencies = item.TargetDependencies.ToList();
+            item.SourceDependencyMetadataAvailable = item.DependencyMetadataAvailable;
+            item.SourceDependencyStateCaptured = true;
+        }
         item.ResetTarget();
         if (item.Excluded)
         {

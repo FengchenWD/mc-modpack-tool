@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _languageAnimation;
     private bool _closeInProgress;
     private bool _closeCommitted;
+    private bool _sidebarExpanded = true;
 
     public MainWindow()
     {
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
 
         var home = new HomeView();
         var migration = new MigrationView();
+        var clientPack = new ClientPackView();
         var settings = new SettingsView();
         home.NavigationRequested += (_, destination) => _ = NavigateAsync(destination);
         settings.LanguageChangeRequested += ChangeLanguageAsync;
@@ -34,10 +36,12 @@ public partial class MainWindow : Window
         {
             ["home"] = home,
             ["migration"] = migration,
+            ["client_pack"] = clientPack,
             ["server"] = new ServerView(),
             ["settings"] = settings
         };
         ContentHost.Content = home;
+        UpdateSidebarVisualState();
 
         SourceInitialized += (_, _) =>
         {
@@ -69,6 +73,42 @@ public partial class MainWindow : Window
     {
         if (sender is RadioButton { CommandParameter: string page })
             await NavigateAsync(page);
+    }
+
+    private void SidebarToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _sidebarExpanded = !_sidebarExpanded;
+        UpdateSidebarVisualState();
+    }
+
+    private void UpdateSidebarVisualState()
+    {
+        SidebarColumn.Width = new GridLength(_sidebarExpanded ? 176 : 64);
+        SidebarBrandPanel.Margin = _sidebarExpanded
+            ? new Thickness(18, 20, 14, 18)
+            : new Thickness(15, 20, 15, 18);
+        SidebarBrandText.Visibility = _sidebarExpanded ? Visibility.Visible : Visibility.Collapsed;
+
+        Visibility textVisibility = _sidebarExpanded ? Visibility.Visible : Visibility.Collapsed;
+        HomeNavText.Visibility = textVisibility;
+        MigrationNavText.Visibility = textVisibility;
+        ClientPackNavText.Visibility = textVisibility;
+        ServerNavText.Visibility = textVisibility;
+        SettingsNavText.Visibility = textVisibility;
+        Thickness navigationPadding = _sidebarExpanded ? new Thickness(13, 0, 13, 0) : new Thickness(10, 0, 0, 0);
+        foreach (RadioButton navigation in new[] { HomeNav, MigrationNav, ClientPackNav, ServerNav, SettingsNav })
+        {
+            navigation.Padding = navigationPadding;
+        }
+
+        SidebarToggleButton.HorizontalAlignment = _sidebarExpanded
+            ? HorizontalAlignment.Right
+            : HorizontalAlignment.Center;
+        SidebarToggleIcon.Text = _sidebarExpanded ? "\uE76B" : "\uE76C";
+        SidebarToggleButton.ToolTip = App.Localization[_sidebarExpanded ? "sidebar.collapse" : "sidebar.expand"];
+        System.Windows.Automation.AutomationProperties.SetName(
+            SidebarToggleButton,
+            App.Localization[_sidebarExpanded ? "sidebar.collapse" : "sidebar.expand"]);
     }
 
     public async Task NavigateAsync(string page)
@@ -118,6 +158,7 @@ public partial class MainWindow : Window
             cancellationToken.ThrowIfCancellationRequested();
             App.Localization.SetLanguage(language);
             App.Settings.Language = language;
+            UpdateSidebarVisualState();
             await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Loaded, cancellationToken);
             await AnimateAsync(UiRoot, UIElement.OpacityProperty, 1, 155, cancellationToken);
         }
@@ -138,6 +179,7 @@ public partial class MainWindow : Window
     {
         HomeNav.IsChecked = page == "home";
         MigrationNav.IsChecked = page == "migration";
+        ClientPackNav.IsChecked = page == "client_pack";
         ServerNav.IsChecked = page == "server";
         SettingsNav.IsChecked = page == "settings";
     }
@@ -156,6 +198,8 @@ public partial class MainWindow : Window
             var shutdownTasks = new List<Task>();
             if (_pages.TryGetValue("migration", out FrameworkElement? page) && page is MigrationView migration)
                 shutdownTasks.Add(migration.ShutdownAsync());
+            if (_pages.TryGetValue("client_pack", out FrameworkElement? clientPage) && clientPage is ClientPackView clientPack)
+                shutdownTasks.Add(clientPack.ShutdownAsync());
             if (_pages.TryGetValue("server", out FrameworkElement? serverPage) && serverPage is ServerView server)
                 shutdownTasks.Add(server.ShutdownAsync());
             await Task.WhenAll(shutdownTasks);

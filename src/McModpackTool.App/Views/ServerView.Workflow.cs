@@ -1,5 +1,3 @@
-using System.Text;
-using System.Net.Http;
 using System.Windows;
 using McModpackTool.Core.Compatibility;
 using McModpackTool.Core.Models;
@@ -30,6 +28,7 @@ public partial class ServerView
         catch (Exception exception)
         {
             Log("ERROR", exception.ToString());
+            SetStatus("server.ready");
             MessageBox.Show(exception.Message, App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -43,72 +42,45 @@ public partial class ServerView
 
     private async Task PrepareAsync()
     {
+        RefreshJavaRecommendation();
         if (_source is null || _working || !PathsEqual(InputPathBox.Text, _readPath))
         {
             MessageBox.Show(App.Localization["server.dialog.prepare_first"], App.Localization["common.warning"],
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        string targetMinecraft = TargetVersionBox.Text.Trim();
-        if (targetMinecraft.Length == 0)
+        string sourceMinecraft = _source.MinecraftVersion;
+        if (sourceMinecraft.Length == 0)
         {
-            MessageBox.Show(App.Localization["server.dialog.target_required"], App.Localization["common.error"],
+            MessageBox.Show(App.Localization["server.dialog.source_version_missing"], App.Localization["common.error"],
                 MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
-        if (_source.InputKind == ServerInputKinds.Directory &&
-            !targetMinecraft.Equals(_source.MinecraftVersion, StringComparison.Ordinal))
-        {
-            TargetVersionBox.Text = _source.MinecraftVersion;
-            return;
-        }
+        string sourceLoaderVersion = _source.LoaderVersion;
+        MinecraftVersionBox.Text = sourceMinecraft;
+        LoaderVersionBox.Text = sourceLoaderVersion;
 
         InvalidatePreparation();
         CancellationToken cancellationToken = BeginOperation();
         SetWorking(true, "server.preparing", indeterminate: true);
         try
         {
-            string targetLoaderVersion = await ResolveTargetLoaderVersionAsync(targetMinecraft, cancellationToken);
-            if (_source.InputKind != ServerInputKinds.Directory &&
-                !string.IsNullOrWhiteSpace(_source.LoaderType) &&
-                string.IsNullOrWhiteSpace(targetLoaderVersion))
-            {
-                MessageBox.Show(App.Localization["server.dialog.loader_version_unavailable"],
-                    App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            LoaderVersionBox.Text = targetLoaderVersion;
-
             if (_source.ManifestPack is not null)
             {
                 foreach (ServerModEntry entry in _source.Mods.Where(entry => entry.ContentItem is not null))
                 {
                     entry.ContentItem!.Excluded = !entry.Selected;
                 }
-                Log("INFO", $"Resolve target mods: Minecraft {targetMinecraft}, {_source.LoaderType}");
-                await _targetResolver.ResolveAsync(
-                    _source.ManifestPack,
-                    targetMinecraft,
-                    _source.LoaderType,
-                    pendingOnly: false,
-                    cancellationToken: cancellationToken);
-                ModsGrid.Items.Refresh();
-                if (!PromptForMissingTargets())
-                {
-                    return;
-                }
             }
 
-            CompatibilitySnapshot snapshot = await CreateCompatibilitySnapshotAsync(
-                targetMinecraft,
-                targetLoaderVersion,
-                cancellationToken);
+            CompatibilitySnapshot snapshot = await CreateCompatibilitySnapshotAsync(cancellationToken);
             CompatibilityReport report = await Task.Run(
                 () => _compatibilityAnalyzer.Analyze(snapshot.Request, cancellationToken),
                 cancellationToken);
             ShowMissingDependencyNotice(report);
-            if (!await ResolveBlockingIssuesAsync(report, snapshot, targetMinecraft, targetLoaderVersion, cancellationToken))
+            if (!await ResolveBlockingIssuesAsync(report, snapshot, cancellationToken))
             {
+                SetStatus("server.ready");
                 return;
             }
 
@@ -117,6 +89,7 @@ public partial class ServerView
             {
                 MessageBox.Show(App.Localization["server.core_none"], App.Localization["common.warning"],
                     MessageBoxButton.OK, MessageBoxImage.Warning);
+                SetStatus("server.ready");
                 return;
             }
 
@@ -133,6 +106,7 @@ public partial class ServerView
         catch (Exception exception)
         {
             Log("ERROR", exception.ToString());
+            SetStatus("server.ready");
             MessageBox.Show($"{App.Localization["dialog.analysis_failed"]}\n\n{exception.Message}",
                 App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -143,70 +117,7 @@ public partial class ServerView
         }
     }
 
-    private async Task<string> ResolveTargetLoaderVersionAsync(
-        string targetMinecraft,
-        CancellationToken cancellationToken)
-    {
-        if (_source is null || string.IsNullOrWhiteSpace(_source.LoaderType) ||
-            targetMinecraft.Equals(_source.MinecraftVersion, StringComparison.Ordinal))
-        {
-            return _source?.LoaderVersion ?? string.Empty;
-        }
-        try
-        {
-            string version = await _loaderVersions.FetchLatestAsync(
-                _source.LoaderType,
-                targetMinecraft,
-                cancellationToken);
-            Log("INFO", $"Target loader: {_source.LoaderType} {version}");
-            return version;
-        }
-        catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
-        {
-            Log("WARN", $"Could not query the target loader version: {exception.Message}");
-            return string.Empty;
-        }
-    }
-
-    private bool PromptForMissingTargets()
-    {
-        if (_source is null)
-        {
-            return false;
-        }
-        bool unresolved = false;
-        foreach (ServerModEntry entry in _source.Mods.Where(entry =>
-                     entry.Selected && entry.ContentItem?.Status == "not_found"))
-        {
-            MessageBoxResult answer = MessageBox.Show(
-                App.Localization.Translate("resolution.not_found", entry.Name),
-                App.Localization["common.warning"], MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (answer == MessageBoxResult.Yes)
-            {
-                entry.Selected = false;
-                entry.ContentItem!.Excluded = true;
-                ServerModRow? row = _modRows.FirstOrDefault(candidate => ReferenceEquals(candidate.Entry, entry));
-                if (row is not null)
-                {
-                    row.Selected = false;
-                }
-            }
-            else
-            {
-                unresolved = true;
-            }
-        }
-        if (unresolved)
-        {
-            MessageBox.Show(App.Localization.Translate("resolution.blocked", 1), App.Localization["common.warning"],
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        return !unresolved;
-    }
-
     private async Task<CompatibilitySnapshot> CreateCompatibilitySnapshotAsync(
-        string targetMinecraft,
-        string targetLoaderVersion,
         CancellationToken cancellationToken)
     {
         if (_source is null)
@@ -268,11 +179,11 @@ public partial class ServerView
             {
                 Items = items,
                 SourceMinecraftVersion = _source.MinecraftVersion,
-                TargetMinecraftVersion = targetMinecraft,
+                TargetMinecraftVersion = _source.MinecraftVersion,
                 SourceLoader = _source.LoaderType,
                 TargetLoader = _source.LoaderType,
                 SourceLoaderVersion = _source.LoaderVersion,
-                TargetLoaderVersion = targetLoaderVersion,
+                TargetLoaderVersion = _source.LoaderVersion,
                 TargetFormat = "server",
             };
             return new CompatibilitySnapshot(request, entries);
@@ -282,78 +193,187 @@ public partial class ServerView
     private async Task<bool> ResolveBlockingIssuesAsync(
         CompatibilityReport report,
         CompatibilitySnapshot snapshot,
-        string targetMinecraft,
-        string targetLoaderVersion,
         CancellationToken cancellationToken)
     {
-        var prompted = new HashSet<ServerModEntry>();
+        var duplicatePrompted = new HashSet<ServerModEntry>();
+        var compatibilityPrompted = new HashSet<ServerModEntry>();
+        var accepted = new HashSet<ServerModEntry>();
+        var unmappedIssues = new List<string>();
         bool unresolved = false;
         foreach (CompatibilityIssue issue in report.Issues.Where(issue => issue.Severity == CompatibilitySeverity.Error))
         {
-            ServerModEntry? entry = FindIssueEntry(issue, snapshot.Entries);
-            if (entry is null || !entry.Selected || !prompted.Add(entry))
+            List<ServerModEntry> issueEntries = FindIssueEntries(issue, snapshot.Entries);
+            if (issueEntries.Count == 0)
             {
-                unresolved |= entry is null;
+                unresolved = true;
+                string item = string.IsNullOrWhiteSpace(issue.Item) ? issue.Code : issue.Item;
+                string message = string.IsNullOrWhiteSpace(issue.Message) ? issue.Code : issue.Message;
+                unmappedIssues.Add($"- {item}: {message}");
                 continue;
             }
-            string details = string.IsNullOrWhiteSpace(issue.Message) ? issue.Code : issue.Message;
-            MessageBoxResult answer = MessageBox.Show(
-                App.Localization.Translate("resolution.incompatible", entry.Name, $"- {details}"),
-                App.Localization["common.warning"], MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (answer == MessageBoxResult.Yes)
+            List<ServerModEntry> candidates = issueEntries.Where(entry => entry.Selected).ToList();
+            if (candidates.Count == 0 || issue.Code == "duplicate_output_path" && candidates.Count == 1)
             {
-                ServerModRow? row = _modRows.FirstOrDefault(candidate => ReferenceEquals(candidate.Entry, entry));
-                if (row is not null)
+                continue;
+            }
+
+            string details = string.IsNullOrWhiteSpace(issue.Message) ? issue.Code : issue.Message;
+            if (issue.Code == "duplicate_output_path")
+            {
+                int remaining = candidates.Count;
+                foreach (ServerModEntry entry in candidates)
                 {
-                    row.Selected = false;
+                    if (remaining <= 1 || !duplicatePrompted.Add(entry))
+                    {
+                        continue;
+                    }
+
+                    MessageBoxResult answer = MessageBox.Show(
+                        App.Localization.Translate("resolution.incompatible", entry.Name, $"- {details}"),
+                        App.Localization["common.warning"], MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (answer == MessageBoxResult.Yes)
+                    {
+                        ExcludeServerMod(entry);
+                        remaining--;
+                    }
                 }
-                else
+                if (remaining > 1)
                 {
-                    entry.Selected = false;
-                    if (entry.ContentItem is not null) entry.ContentItem.Excluded = true;
+                    unresolved = true;
                 }
+                continue;
+            }
+
+            ServerModEntry entryToPrompt = candidates[0];
+            if (!compatibilityPrompted.Add(entryToPrompt))
+            {
+                continue;
+            }
+            MessageBoxResult issueAnswer = MessageBox.Show(
+                App.Localization.Translate("server.dialog.incompatible", entryToPrompt.Name, $"- {details}"),
+                App.Localization["common.warning"], MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (issueAnswer == MessageBoxResult.Yes)
+            {
+                ExcludeServerMod(entryToPrompt);
             }
             else
             {
-                unresolved = true;
+                accepted.Add(entryToPrompt);
             }
         }
         if (unresolved)
         {
+            if (unmappedIssues.Count > 0)
+            {
+                MessageBox.Show(
+                    App.Localization.Translate("resolution.unmapped", string.Join(Environment.NewLine, unmappedIssues.Distinct().Take(20))),
+                    App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             MessageBox.Show(App.Localization.Translate("resolution.blocked", report.Counts.GetValueOrDefault(CompatibilitySeverity.Error)),
                 App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
-        if (prompted.Count == 0)
-        {
-            return !report.HasErrors;
-        }
-
-        CompatibilitySnapshot refreshed = await CreateCompatibilitySnapshotAsync(
-            targetMinecraft, targetLoaderVersion, cancellationToken);
+        CompatibilitySnapshot refreshed = await CreateCompatibilitySnapshotAsync(cancellationToken);
         CompatibilityReport refreshedReport = await Task.Run(
             () => _compatibilityAnalyzer.Analyze(refreshed.Request, cancellationToken), cancellationToken);
         ShowMissingDependencyNotice(refreshedReport);
-        if (refreshedReport.HasErrors)
+        int remainingErrors = refreshedReport.Issues.Count(issue =>
+            issue.Severity == CompatibilitySeverity.Error &&
+            IsUnresolvedAfterDecision(issue, refreshed.Entries, accepted));
+        if (remainingErrors > 0)
         {
-            MessageBox.Show(App.Localization.Translate("resolution.blocked", refreshedReport.Counts.GetValueOrDefault(CompatibilitySeverity.Error)),
+            MessageBox.Show(App.Localization.Translate("resolution.blocked", remainingErrors),
                 App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
         return true;
     }
 
-    private static ServerModEntry? FindIssueEntry(
+    private static bool IsUnresolvedAfterDecision(
+        CompatibilityIssue issue,
+        IReadOnlyDictionary<int, ServerModEntry> entries,
+        IReadOnlySet<ServerModEntry> accepted)
+    {
+        List<ServerModEntry> issueEntries = FindIssueEntries(issue, entries);
+        List<ServerModEntry> selected = issueEntries.Where(entry => entry.Selected).ToList();
+        if (selected.Count == 0)
+        {
+            return issueEntries.Count == 0;
+        }
+        if (issue.Code == "duplicate_output_path")
+        {
+            return selected.Count > 1;
+        }
+        return !selected.Any(accepted.Contains);
+    }
+
+    private void ExcludeServerMod(ServerModEntry entry)
+    {
+        ServerModRow? row = _modRows.FirstOrDefault(candidate => ReferenceEquals(candidate.Entry, entry));
+        if (row is not null)
+        {
+            row.Selected = false;
+            return;
+        }
+
+        entry.Selected = false;
+        if (entry.ContentItem is not null)
+        {
+            entry.ContentItem.Excluded = true;
+        }
+    }
+
+    private static List<ServerModEntry> FindIssueEntries(
         CompatibilityIssue issue,
         IReadOnlyDictionary<int, ServerModEntry> entries)
     {
-        if (issue.Evidence.TryGetValue("item_index", out object? value) && TryConvertIndex(value, out int index) &&
-            entries.TryGetValue(index, out ServerModEntry? entry))
+        var result = new List<ServerModEntry>();
+        if (issue.Evidence.TryGetValue("item_index", out object? value))
         {
-            return entry;
+            AddIndexes(value, entries, result);
         }
-        return entries.Values.FirstOrDefault(entry =>
-            entry.Name.Equals(issue.Item, StringComparison.OrdinalIgnoreCase));
+        if (issue.Evidence.TryGetValue("item_indexes", out value))
+        {
+            AddIndexes(value, entries, result);
+        }
+        if (result.Count == 0)
+        {
+            ServerModEntry? named = entries.Values.FirstOrDefault(entry =>
+                entry.Name.Equals(issue.Item, StringComparison.OrdinalIgnoreCase));
+            if (named is not null)
+            {
+                result.Add(named);
+            }
+        }
+        return result;
+    }
+
+    private static void AddIndexes(
+        object? value,
+        IReadOnlyDictionary<int, ServerModEntry> entries,
+        ICollection<ServerModEntry> destination)
+    {
+        if (value is System.Collections.IEnumerable values and not string)
+        {
+            foreach (object? item in values)
+            {
+                AddIndex(item, entries, destination);
+            }
+            return;
+        }
+        AddIndex(value, entries, destination);
+    }
+
+    private static void AddIndex(
+        object? value,
+        IReadOnlyDictionary<int, ServerModEntry> entries,
+        ICollection<ServerModEntry> destination)
+    {
+        if (TryConvertIndex(value, out int index) && entries.TryGetValue(index, out ServerModEntry? entry) &&
+            !destination.Contains(entry))
+        {
+            destination.Add(entry);
+        }
     }
 
     private static bool TryConvertIndex(object? value, out int index)
@@ -393,13 +413,12 @@ public partial class ServerView
         {
             return;
         }
-        string targetMinecraft = TargetVersionBox.Text.Trim();
         ServerCoreCatalogResult catalog = await _coreService.GetAvailableAsync(
             new ServerCoreQuery
             {
-                MinecraftVersion = targetMinecraft,
+                MinecraftVersion = _source.MinecraftVersion,
                 LoaderType = _source.LoaderType,
-                LoaderVersion = LoaderVersionBox.Text.Trim(),
+                LoaderVersion = _source.LoaderVersion,
             },
             cancellationToken);
         string? previousId = (CoreCombo.SelectedItem as CoreRow)?.Option.Id;
@@ -420,6 +439,7 @@ public partial class ServerView
 
     private async Task BuildAsync()
     {
+        RefreshJavaRecommendation();
         if (_source is null || _working || !PreparationIsCurrent())
         {
             MessageBox.Show(App.Localization["server.dialog.prepare_first"], App.Localization["common.warning"],
@@ -439,6 +459,10 @@ public partial class ServerView
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(OutputDirectoryBox.Text) && !TryChooseOutputDirectory())
+        {
+            return;
+        }
         string? outputPath = ResolveOutputPath();
         if (outputPath is null)
         {
@@ -455,7 +479,7 @@ public partial class ServerView
         bool eulaAccepted = MessageBox.Show(
             App.Localization["server.dialog.eula"], App.Localization["common.warning"],
             MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
-        string? javaExecutable = ResolveJavaExecutable(coreRow.Option);
+        string? javaExecutable = await ResolveJavaExecutableAsync();
         if (javaExecutable is null)
         {
             return;
@@ -468,9 +492,6 @@ public partial class ServerView
         var request = new ServerBuildRequest
         {
             Source = _source,
-            TargetMinecraftVersion = TargetVersionBox.Text.Trim(),
-            TargetLoaderType = _source.LoaderType,
-            TargetLoaderVersion = LoaderVersionBox.Text.Trim(),
             CoreId = coreRow.Option.Id,
             OutputPath = outputPath,
             IncludeConfig = ConfigCheckBox.IsChecked == true,
@@ -484,22 +505,45 @@ public partial class ServerView
         SetWorking(true, "server.building", indeterminate: true);
         try
         {
-            var progress = new Progress<string>(message => Log("INFO", message));
+            var progress = new Progress<ServerBuildPhase>(phase =>
+            {
+                if (phase is not (ServerBuildPhase.DownloadingCore or ServerBuildPhase.DownloadingMods))
+                {
+                    HideDownloadSpeed();
+                }
+                string statusKey = phase switch
+                {
+                    ServerBuildPhase.DownloadingCore => "server.building_core",
+                    ServerBuildPhase.CopyingMods => "server.building_mods_copy",
+                    ServerBuildPhase.DownloadingMods => "server.building_mods_download",
+                    ServerBuildPhase.CopyingConfiguration => "server.building_config",
+                    ServerBuildPhase.CopyingWorld => "server.building_world",
+                    ServerBuildPhase.WritingLaunchFiles => "server.building_files",
+                    ServerBuildPhase.CompressingArchive => "server.building_archive",
+                    _ => "server.building",
+                };
+                SetStatus(statusKey);
+                Log("INFO", App.Localization[statusKey]);
+            });
+            var transferProgress = new Progress<DownloadTransferProgress>(UpdateDownloadSpeed);
             ServerBuildResult result = await _builder.BuildAsync(
                 request,
                 coreRow.Option,
                 javaExecutable,
-                progress,
-                cancellationToken);
+                progress: progress,
+                cancellationToken: cancellationToken,
+                transferProgress: transferProgress);
             if (!result.Succeeded)
             {
                 string missing = string.Join(Environment.NewLine, result.MissingFiles.Take(20).Select(item => $"- {item}"));
+                SetStatus("server.ready");
                 MessageBox.Show(App.Localization.Translate("server.dialog.blocked", missing),
                     App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
             cancellationToken.ThrowIfCancellationRequested();
-            string message = $"{App.Localization["server.build_complete"]}\n\n{App.Localization.Translate("build.location", outputPath)}";
+            SetStatus("server.build_complete");
+            string message = $"{App.Localization["server.build_complete"]}\n\n{App.Localization["server.build_launch_hint"]}\n\n{App.Localization.Translate("build.location", outputPath)}";
             new BuildSuccessWindow(message, outputPath) { Owner = Window.GetWindow(this) }.ShowDialog();
             Log("INFO", $"Server ZIP complete: {outputPath}");
         }
@@ -510,6 +554,7 @@ public partial class ServerView
         catch (Exception exception)
         {
             Log("ERROR", exception.ToString());
+            SetStatus("server.ready");
             MessageBox.Show($"{App.Localization["server.dialog.build_failed"]}\n\n{exception.Message}",
                 App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -520,44 +565,55 @@ public partial class ServerView
         }
     }
 
-    private string? ResolveJavaExecutable(ServerCoreOption option)
+    private async Task<string?> ResolveJavaExecutableAsync()
     {
-        if (option.InstallStrategy != ServerCoreInstallStrategy.JavaInstaller)
+        string selectedPath = (JavaCombo.SelectedItem as JavaRuntimeInfo)?.ExecutablePath
+            ?? _selectedJavaPath;
+        if (!string.IsNullOrWhiteSpace(selectedPath) && File.Exists(selectedPath))
         {
-            return string.Empty;
-        }
-
-        string? javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
-        if (!string.IsNullOrWhiteSpace(javaHome))
-        {
-            string candidate = Path.Combine(javaHome.Trim().Trim('"'), "bin", "java.exe");
-            if (File.Exists(candidate))
+            // Re-probe at export time. A runtime can be upgraded or replaced after
+            // the initial read, so cached metadata must not bypass compatibility checks.
+            JavaRuntimeInfo? selectedRuntime = await _javaRuntimeService.ProbeExecutableAsync(selectedPath);
+            if (selectedRuntime is null)
             {
-                return candidate;
+                MessageBox.Show(App.Localization["server.dialog.java_required"], App.Localization["common.warning"],
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
             }
-        }
-
-        string? path = Environment.GetEnvironmentVariable("PATH");
-        if (!string.IsNullOrWhiteSpace(path))
-        {
-            foreach (string directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            JavaRuntimeInfo? cachedRuntime = _javaRuntimes.FirstOrDefault(runtime =>
+                runtime.ExecutablePath.Equals(selectedRuntime.ExecutablePath, StringComparison.OrdinalIgnoreCase));
+            _suppressJavaSelection = true;
+            try
             {
-                try
+                if (cachedRuntime is null)
                 {
-                    string candidate = Path.Combine(directory.Trim('"'), "java.exe");
-                    if (File.Exists(candidate))
+                    _javaRuntimes.Add(selectedRuntime);
+                }
+                else
+                {
+                    int index = _javaRuntimes.IndexOf(cachedRuntime);
+                    if (index >= 0)
                     {
-                        return candidate;
+                        _javaRuntimes[index] = selectedRuntime;
                     }
                 }
-                catch (ArgumentException)
-                {
-                    // Ignore malformed PATH entries and let the user choose Java below.
-                }
+                JavaCombo.SelectedItem = selectedRuntime;
             }
+            finally
+            {
+                _suppressJavaSelection = false;
+            }
+            _selectedJavaPath = selectedRuntime.ExecutablePath;
+            if (selectedRuntime.MajorVersion > 0 && selectedRuntime.MajorVersion != _recommendedJavaMajor)
+            {
+                MessageBox.Show(
+                    JavaCompatibilityMessage(_recommendedJavaMajor, selectedRuntime.MajorVersion),
+                    App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
+            }
+            return selectedRuntime.ExecutablePath;
         }
-
-        MessageBox.Show(App.Localization["server.dialog.java_required"], App.Localization["common.warning"],
+        MessageBox.Show(JavaMissingMessage(), App.Localization["common.warning"],
             MessageBoxButton.OK, MessageBoxImage.Warning);
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
@@ -566,8 +622,56 @@ public partial class ServerView
             CheckFileExists = true,
             Multiselect = false,
         };
-        return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FileName : null;
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true)
+        {
+            return null;
+        }
+        JavaRuntimeInfo? runtime = await _javaRuntimeService.ProbeExecutableAsync(dialog.FileName);
+        if (runtime is null)
+        {
+            MessageBox.Show(App.Localization["server.dialog.java_required"], App.Localization["common.warning"],
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return null;
+        }
+        if (runtime.MajorVersion > 0 && runtime.MajorVersion != _recommendedJavaMajor)
+        {
+            MessageBox.Show(
+                App.Localization.Translate("server.dialog.java_incompatible",
+                    MinecraftVersionBox.Text.Trim(), _recommendedJavaMajor, runtime.MajorVersion),
+                App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            return null;
+        }
+        JavaRuntimeInfo? existing = _javaRuntimes.FirstOrDefault(candidate =>
+            candidate.ExecutablePath.Equals(runtime.ExecutablePath, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            _javaRuntimes.Add(runtime);
+            existing = runtime;
+        }
+        _selectedJavaPath = existing.ExecutablePath;
+        _suppressJavaSelection = true;
+        try { JavaCombo.SelectedItem = existing; }
+        finally { _suppressJavaSelection = false; }
+        RefreshJavaHint();
+        return existing.ExecutablePath;
     }
+
+    private string JavaMissingMessage()
+    {
+        string language = App.Localization.Language;
+        return language.Equals("en_US", StringComparison.OrdinalIgnoreCase)
+            ? "No Java runtime is selected. Choose the Java executable that matches the imported Minecraft version."
+            : language.Equals("zh_HK", StringComparison.OrdinalIgnoreCase)
+                ? "尚未選擇 Java 執行環境。請選擇與匯入的 Minecraft 版本相容的 Java 可執行檔。"
+                : "尚未选择 Java 运行环境。请选择与导入的 Minecraft 版本兼容的 Java 可执行文件。";
+    }
+
+    private string JavaCompatibilityMessage(int required, int selected)
+        => App.Localization.Translate(
+            "server.dialog.java_incompatible",
+            MinecraftVersionBox.Text.Trim(),
+            required,
+            selected);
 
     private string? ResolveOutputPath()
     {

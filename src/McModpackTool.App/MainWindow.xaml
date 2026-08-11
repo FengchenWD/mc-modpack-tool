@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="{Binding [app.name]}" Width="1280" Height="800" MinWidth="1100" MinHeight="680"
+        xmlns:ui="clr-namespace:McModpackTool.App.UI"
+        Title="{Binding [app.name]}" Width="1280" Height="800" MinWidth="1120" MinHeight="600"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         Foreground="{DynamicResource TextBrush}" FontFamily="{DynamicResource AppFontFamily}"
         UseLayoutRounding="True" SnapsToDevicePixels="True">
@@ -29,7 +30,7 @@
                                     <Border x:Name="SelectionIndicator" Width="3" Height="18" Margin="-10,0,0,0"
                                             HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="2"
                                             Background="{DynamicResource AccentBrush}" Opacity="0" />
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" VerticalAlignment="Center" Text="{TemplateBinding Tag}" />
+                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" VerticalAlignment="Center" TextAlignment="Center" Text="{TemplateBinding Tag}" />
                                     <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Margin="5,0,0,0" />
                                 </Grid>
                             </Grid>
@@ -128,6 +129,17 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="SidebarToggleButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="MinWidth" Value="40" />
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="MaxWidth" Value="40" />
+            <Setter Property="MaxHeight" Value="40" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
     </Window.Resources>
 
     <shell:WindowChrome.WindowChrome>
@@ -138,52 +150,21 @@
     <Grid x:Name="UiRoot" Background="{DynamicResource AppBackgroundBrush}">
         <Grid.RowDefinitions><RowDefinition Height="40" /><RowDefinition Height="*" /></Grid.RowDefinitions>
 
-        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-            <Grid>
-                <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
-                    <Image Width="18" Height="18" Source="Assets/mc_modpack_tool.png" Stretch="Uniform" />
-                    <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextBrush}" Text="{Binding [app.name]}" />
-                </StackPanel>
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"
-                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button x:Name="MinimizeWindowButton" Style="{StaticResource CaptionButtonStyle}" Content="&#xE921;"
-                            AutomationProperties.Name="{Binding [window.minimize]}" ToolTip="{Binding [window.minimize]}"
-                            Click="MinimizeWindow_Click" />
-                    <Button x:Name="MaximizeWindowButton" Style="{StaticResource CaptionButtonStyle}"
-                            AutomationProperties.Name="{Binding [window.maximize_restore]}" ToolTip="{Binding [window.maximize_restore]}"
-                            Click="MaximizeRestoreWindow_Click">
-                        <TextBlock FontFamily="Segoe Fluent Icons" FontSize="12">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="&#xE922;" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="Maximized">
-                                            <Setter Property="Text" Value="&#xE923;" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Button>
-                    <Button x:Name="CloseWindowButton" Style="{StaticResource CaptionCloseButtonStyle}" Content="&#xE8BB;"
-                            AutomationProperties.Name="{Binding [window.close]}" ToolTip="{Binding [window.close]}"
-                            Click="CloseWindow_Click" />
-                </StackPanel>
-            </Grid>
-        </Border>
+        <ui:AppTitleBar x:Name="MainTitleBar" Title="{Binding [app.name]}"
+                        MinimizeVisibility="Visible" MaximizeVisibility="Visible" />
 
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="176" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition x:Name="SidebarColumn" Width="176" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
 
-            <Border Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+            <Border x:Name="SidebarBorder" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,1,0" ClipToBounds="True">
                 <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <StackPanel Margin="18,20,14,18">
+                <StackPanel x:Name="SidebarBrandPanel" Margin="18,20,14,18">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="38" /><ColumnDefinition /></Grid.ColumnDefinitions>
                         <Image Width="34" Height="34" Source="Assets/mc_modpack_tool.png" Stretch="Uniform" />
-                        <StackPanel Grid.Column="1" Margin="7,0,0,0" VerticalAlignment="Center">
+                        <StackPanel x:Name="SidebarBrandText" Grid.Column="1" Margin="7,0,0,0" VerticalAlignment="Center">
                             <TextBlock FontWeight="SemiBold" FontSize="13" Text="{Binding [app.name]}" TextTrimming="CharacterEllipsis" />
                             <TextBlock FontSize="10" Foreground="{DynamicResource MutedTextBrush}" Text="{Binding [app.short_subtitle]}" />
                         </StackPanel>
@@ -191,23 +172,38 @@
                 </StackPanel>
 
                 <StackPanel Grid.Row="1">
-                    <RadioButton x:Name="HomeNav" GroupName="Navigation" IsChecked="True" Tag="&#xE80F;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="home" Content="{Binding [nav.home]}" />
-                    <RadioButton x:Name="MigrationNav" GroupName="Navigation" Tag="&#xE8AB;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="migration" Content="{Binding [nav.migration]}" />
-                    <RadioButton x:Name="ServerNav" GroupName="Navigation" Tag="&#xE950;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="server" Content="{Binding [nav.server]}" />
+                    <RadioButton x:Name="HomeNav" GroupName="Navigation" IsChecked="True" Tag="&#xE80F;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="home" ToolTip="{Binding [nav.home]}" AutomationProperties.Name="{Binding [nav.home]}"><TextBlock x:Name="HomeNavText" Text="{Binding [nav.home]}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" /></RadioButton>
+                    <RadioButton x:Name="MigrationNav" GroupName="Navigation" Tag="&#xE8AB;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="migration" ToolTip="{Binding [nav.migration]}" AutomationProperties.Name="{Binding [nav.migration]}"><TextBlock x:Name="MigrationNavText" Text="{Binding [nav.migration]}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" /></RadioButton>
+                    <RadioButton x:Name="ClientPackNav" GroupName="Navigation" Tag="&#xE7B8;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="client_pack" ToolTip="{Binding [nav.client_pack]}" AutomationProperties.Name="{Binding [nav.client_pack]}"><TextBlock x:Name="ClientPackNavText" Text="{Binding [nav.client_pack]}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" /></RadioButton>
+                    <RadioButton x:Name="ServerNav" GroupName="Navigation" Tag="&#xE950;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="server" ToolTip="{Binding [nav.server]}" AutomationProperties.Name="{Binding [nav.server]}"><TextBlock x:Name="ServerNavText" Text="{Binding [nav.server]}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" /></RadioButton>
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" Margin="0,0,0,8">
                     <Separator Margin="14,0,14,7" Background="{DynamicResource BorderBrush}" />
-                    <RadioButton x:Name="SettingsNav" GroupName="Navigation" Tag="&#xE713;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="settings" Content="{Binding [nav.settings]}" />
+                    <RadioButton x:Name="SettingsNav" GroupName="Navigation" Tag="&#xE713;" Style="{StaticResource NavStyle}" Click="Nav_Click" CommandParameter="settings" ToolTip="{Binding [nav.settings]}" AutomationProperties.Name="{Binding [nav.settings]}"><TextBlock x:Name="SettingsNavText" Text="{Binding [nav.settings]}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" /></RadioButton>
+                    <Button x:Name="SidebarToggleButton" Margin="8,2" HorizontalAlignment="Right"
+                            Style="{StaticResource SidebarToggleButtonStyle}" Click="SidebarToggle_Click">
+                        <TextBlock x:Name="SidebarToggleIcon" Width="18" Height="18"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   FontFamily="Segoe Fluent Icons" FontSize="14" LineHeight="18"
+                                   LineStackingStrategy="BlockLineHeight" TextAlignment="Center"
+                                   Text="&#xE76B;" />
+                    </Button>
                 </StackPanel>
                 </Grid>
             </Border>
 
-            <Grid Grid.Column="1" ClipToBounds="True">
-                <ContentControl x:Name="ContentHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" RenderTransformOrigin="0.5,0.5">
+            <ScrollViewer x:Name="ContentViewport" Grid.Column="1"
+                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                          HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                          CanContentScroll="False" Focusable="False">
+                <ContentControl x:Name="ContentHost" MinWidth="760"
+                                Width="{Binding ViewportWidth, ElementName=ContentViewport, Mode=OneWay}"
+                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                RenderTransformOrigin="0.5,0.5">
                     <ContentControl.RenderTransform><TranslateTransform /></ContentControl.RenderTransform>
                 </ContentControl>
-            </Grid>
+            </ScrollViewer>
         </Grid>
     </Grid>
 </Window>

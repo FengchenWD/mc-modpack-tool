@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace McModpackTool.App.UI;
 
@@ -15,8 +16,11 @@ internal static class WindowEffects
     public static void AttachWorkAreaMaximization(Window window)
     {
         nint handle = new WindowInteropHelper(window).Handle;
-        if (handle != 0)
-            HwndSource.FromHwnd(handle)?.AddHook(WorkAreaWindowProc);
+        HwndSource? source = handle == 0 ? null : HwndSource.FromHwnd(handle);
+        if (source is null) return;
+
+        source.AddHook((nint hwnd, int message, nint wParam, nint lParam, ref bool handled) =>
+            WorkAreaWindowProc(window, hwnd, message, wParam, lParam, ref handled));
     }
 
     public static bool Apply(Window window, bool dark)
@@ -41,7 +45,13 @@ internal static class WindowEffects
         catch (EntryPointNotFoundException) { return false; }
     }
 
-    private static nint WorkAreaWindowProc(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    private static nint WorkAreaWindowProc(
+        Window window,
+        nint hwnd,
+        int message,
+        nint wParam,
+        nint lParam,
+        ref bool handled)
     {
         if (message != WmGetMinMaxInfo || lParam == 0) return 0;
 
@@ -56,6 +66,15 @@ internal static class WindowEffects
         minMaxInfo.MaxPosition.Y = monitorInfo.Work.Top - monitorInfo.Monitor.Top;
         minMaxInfo.MaxSize.X = monitorInfo.Work.Right - monitorInfo.Work.Left;
         minMaxInfo.MaxSize.Y = monitorInfo.Work.Bottom - monitorInfo.Work.Top;
+
+        DpiScale dpi = VisualTreeHelper.GetDpi(window);
+        minMaxInfo.MinTrackSize.X = Math.Max(
+            minMaxInfo.MinTrackSize.X,
+            (int)Math.Ceiling(window.MinWidth * dpi.DpiScaleX));
+        minMaxInfo.MinTrackSize.Y = Math.Max(
+            minMaxInfo.MinTrackSize.Y,
+            (int)Math.Ceiling(window.MinHeight * dpi.DpiScaleY));
+
         Marshal.StructureToPtr(minMaxInfo, lParam, false);
         handled = true;
         return 0;

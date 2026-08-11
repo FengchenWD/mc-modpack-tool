@@ -1,0 +1,23 @@
+{
+  "targetMinecraft": "1.21.1",
+  "targetLoaderType": "fabric",
+  "targetLoaderVersion": "0.16.14",
+  "outputDirectory": "",
+  "language": "zh_CN",
+  "theme": "light",
+  "accentColor": "#167D6A",
+  "fontFamily": "Microsoft YaHei UI",
+  "acceptedAgreementVersion": "2026-08-05-v3",
+  "target_mc": "1.21.1",
+  "target_loader_type": "fabric",
+  "target_loader_version": "0.16.14",
+  "output_dir": "",
+  "ui_preferences": {
+    "schema_version": 1,
+    "language": "zh_CN",
+    "theme": "light",
+    "accent_color": "#167D6A",
+    "font_family": "Microsoft YaHei UI"
+  },
+  "accepted_agreement_version": "2026-08-05-v3"
+}

@@ -8,7 +8,7 @@
     <RootNamespace>McModpackTool.App</RootNamespace>
     <AssemblyName>MC整合包工具</AssemblyName>
     <ApplicationIcon Condition="Exists('Assets\mc_modpack_tool.ico')">Assets\mc_modpack_tool.ico</ApplicationIcon>
-    <Version>1.0.0-beta.2</Version>
+    <Version>1.0.0-beta.4</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>MC整合包工具</Product>
     <Authors>风尘WD</Authors>

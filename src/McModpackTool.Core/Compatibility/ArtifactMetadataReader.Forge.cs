@@ -18,6 +18,8 @@ public static partial class ArtifactMetadataReader
                 var id = values.GetValueOrDefault("modId", string.Empty);
                 AddIdentity(builder.ModIds, id);
                 builder.Id = Prefer(builder.Id, id);
+                builder.Name = Prefer(builder.Name, values.GetValueOrDefault("displayName", string.Empty));
+                builder.Description = Prefer(builder.Description, values.GetValueOrDefault("description", string.Empty));
                 var version = values.GetValueOrDefault("version", string.Empty);
                 if (!version.Contains("${", StringComparison.Ordinal))
                 {

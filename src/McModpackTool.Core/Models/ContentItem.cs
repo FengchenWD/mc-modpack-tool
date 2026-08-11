@@ -74,6 +74,12 @@ public sealed class ContentItem
 
     public bool DependencyMetadataAvailable { get; set; }
 
+    public List<DependencyReference> SourceDependencies { get; set; } = [];
+
+    public bool SourceDependencyMetadataAvailable { get; set; }
+
+    public bool SourceDependencyStateCaptured { get; set; }
+
     public JsonObject? OriginalEntry { get; set; }
 
     public bool IdentityLocked { get; set; }

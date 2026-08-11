@@ -108,7 +108,8 @@ public sealed partial class ServerCoreService : IDisposable
     /// </summary>
     public async Task<ServerCoreInstallResult> InstallAsync(
         ServerCoreInstallRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<DownloadTransferProgress>? transferProgress = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Option);
@@ -153,7 +154,8 @@ public sealed partial class ServerCoreService : IDisposable
                     Path.GetFileName(targetPath),
                     expectedSize: artifact.Size,
                     expectedHashes: artifact.Hashes,
-                    cancellationToken: cancellationToken)
+                    cancellationToken: cancellationToken,
+                    transferProgress: transferProgress)
                 .ConfigureAwait(false);
             if (!succeeded)
             {
@@ -328,11 +330,6 @@ public sealed partial class ServerCoreService : IDisposable
 
     private static string FindInstalledLaunchCommand(string root, string installerPath)
     {
-        if (File.Exists(Path.Combine(root, "run.bat")))
-        {
-            return "call run.bat nogui";
-        }
-
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -349,6 +346,11 @@ public sealed partial class ServerCoreService : IDisposable
                 ? "@user_jvm_args.txt "
                 : string.Empty;
             return $"java {userArgs}@{relative} nogui";
+        }
+
+        if (File.Exists(Path.Combine(root, "run.bat")))
+        {
+            return "call run.bat nogui";
         }
 
         string installerFullPath = Path.GetFullPath(installerPath);
