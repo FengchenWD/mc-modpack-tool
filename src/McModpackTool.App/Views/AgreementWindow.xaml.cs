@@ -75,10 +75,26 @@ public partial class AgreementWindow : Window
         }
     }
 
-    private void License_Click(object sender, RoutedEventArgs e)
+    private void CodeLicense_Click(object sender, RoutedEventArgs e) => OpenLicense(AgreementContent.CodeLicenseUrl);
+
+    private void AssetLicense_Click(object sender, RoutedEventArgs e) => OpenLicense(AgreementContent.AssetLicenseUrl);
+
+    private void ThirdPartyNotices_Click(object sender, RoutedEventArgs e)
     {
-        try { Process.Start(new ProcessStartInfo(AgreementContent.LicenseUrl) { UseShellExecute = true }); }
-        catch { MessageBox.Show(AgreementContent.LicenseUrl, Title, MessageBoxButton.OK, MessageBoxImage.Information); }
+        try
+        {
+            MessageBox.Show(ThirdPartyNoticeContent.Get(), App.Localization["agreement.third_party_title"], MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(exception.Message, App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OpenLicense(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch { MessageBox.Show(url, Title, MessageBoxButton.OK, MessageBoxImage.Information); }
     }
 
     private void Accept_Click(object sender, RoutedEventArgs e) => DialogResult = true;

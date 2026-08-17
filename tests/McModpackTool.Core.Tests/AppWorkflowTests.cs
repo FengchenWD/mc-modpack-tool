@@ -101,12 +101,21 @@ internal static class AppWorkflowTests
         foreach (string language in new[] { "zh_CN", "zh_HK", "en_US" })
         {
             string text = AgreementContent.Get(language);
+            Assert(text.Contains("PolyForm Noncommercial License 1.0.0", StringComparison.Ordinal), $"Code license missing for {language}.");
+            Assert(text.Contains("https://polyformproject.org/licenses/noncommercial/1.0.0", StringComparison.Ordinal), $"Code license URL missing for {language}.");
             Assert(text.Contains("CC BY-NC-SA 4.0", StringComparison.Ordinal), $"Agreement license missing for {language}.");
             Assert(text.Contains("https://creativecommons.org/licenses/by-nc-sa/4.0/", StringComparison.Ordinal), $"Agreement URL missing for {language}.");
+            Assert(text.Contains("dual license", StringComparison.OrdinalIgnoreCase) || text.Contains("dual-license", StringComparison.OrdinalIgnoreCase), $"No-dual-license statement missing for {language}.");
+            Assert(text.Contains("third-party", StringComparison.OrdinalIgnoreCase) || text.Contains("第三方", StringComparison.Ordinal), $"Third-party license boundary missing for {language}.");
+            Assert(text.Contains("Required Notice:", StringComparison.Ordinal), $"PolyForm required notice missing for {language}.");
             Assert(text.Contains("AI", StringComparison.OrdinalIgnoreCase), $"AI disclosure missing for {language}.");
             Assert(text.Contains("Minecraft", StringComparison.OrdinalIgnoreCase), $"Minecraft disclaimer missing for {language}.");
             Assert(text.Contains("CurseForge", StringComparison.OrdinalIgnoreCase), $"Network disclosure missing for {language}.");
         }
+
+        string thirdPartyNotices = ThirdPartyNoticeContent.Get();
+        Assert(thirdPartyNotices.Contains("MIT License", StringComparison.Ordinal), "Embedded .NET MIT license missing.");
+        Assert(thirdPartyNotices.Contains(".NET", StringComparison.OrdinalIgnoreCase), "Embedded .NET third-party notices missing.");
     }
 
     private static void LocalizationCatalogCoversVisibleKeys()
@@ -118,6 +127,7 @@ internal static class AppWorkflowTests
             "migration.drop_title", "migration.check", "migration.build", "settings.title",
             "settings.language", "settings.appearance", "settings.light", "settings.dark",
             "settings.system", "settings.accent", "settings.font", "agreement.title",
+            "agreement.code_license", "agreement.asset_license", "agreement.third_party", "agreement.third_party_title",
             "agreement.accept", "agreement.decline", "build.open_folder",
             "window.minimize", "window.maximize_restore", "window.close",
             "build.incomplete", "build.incomplete_status", "status.canceling",

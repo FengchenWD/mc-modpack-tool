@@ -2,8 +2,9 @@ namespace McModpackTool.App.Services;
 
 public static class AgreementContent
 {
-    public const string Version = "2026-08-05-v3";
-    public const string LicenseUrl = "https://creativecommons.org/licenses/by-nc-sa/4.0/";
+    public const string Version = "2026-08-17-v4";
+    public const string CodeLicenseUrl = "https://polyformproject.org/licenses/noncommercial/1.0.0";
+    public const string AssetLicenseUrl = "https://creativecommons.org/licenses/by-nc-sa/4.0/";
 
     public static string Get(string language) => language switch
     {
@@ -15,7 +16,7 @@ public static class AgreementContent
     private const string SimplifiedChinese = """
 《MC整合包工具用户协议与使用须知》
 
-生效日期：2026 年 8 月 5 日
+生效日期：2026 年 8 月 17 日
 
 在使用本软件前，请完整阅读并理解本协议。点击“我已阅读并同意”即表示你同意受本协议约束；如不同意，请退出并停止使用本软件。
 
@@ -29,22 +30,23 @@ public static class AgreementContent
    Minecraft EULA：https://www.minecraft.net/eula
    Minecraft Usage Guidelines：https://www.minecraft.net/usage-guidelines
 
-二、许可协议（CC BY-NC-SA 4.0）
+二、分域许可与非双重许可
 
-1. 本软件由作者依据“知识共享 署名—非商业性使用—相同方式共享 4.0 国际许可协议”（CC BY-NC-SA 4.0）免费许可和分发。
-2. 在遵守许可条件的前提下，你可以复制、分享、转载本软件，也可以修改、改编并基于本软件创作。
-3. 署名（BY）：分享或修改时，应以合理方式标注软件名称及作者“风尘WD”，提供本许可协议链接，保留已有版权与许可说明，并说明是否作出修改；不得暗示作者为你的版本、用途或行为背书。
-4. 非商业性使用（NC）：不得将本软件或其修改版本主要用于获取商业利益或金钱报酬。商业授权需求应另行取得作者明确许可。
-5. 相同方式共享（SA）：公开分发修改版本或演绎作品时，应继续采用 CC BY-NC-SA 4.0 或该许可允许的兼容许可。
-6. 不得附加法律条款、数字版权管理措施或其他技术限制，阻止接收者行使本许可已经授予的权利。
-7. 上述内容仅为主要条款摘要，不能替代许可协议法律文本。如摘要与正式文本不一致，以官方协议原文为准：
-   https://creativecommons.org/licenses/by-nc-sa/4.0/
+1. 除另有明确标注或属于第三方内容外，作者拥有并有权授权的自研代码，包括源代码、XAML 与项目文件、构建脚本、测试代码及其编译形式，依据 PolyForm Noncommercial License 1.0.0 许可。你只能在该许可证允许的非商业用途和条件范围内使用、复制、修改及分发相关代码或程序；任何商业用途均须事先取得作者另行出具的书面授权。
+2. 除另有明确标注或属于第三方内容外，作者拥有并有权授权的自研文档、说明文字、Logo、图像及其他美术资源，依据“知识共享 署名—非商业性使用—相同方式共享 4.0 国际许可协议”（CC BY-NC-SA 4.0）许可。分享或改编这些材料时，应合理署名作者“风尘WD”、提供许可链接、注明是否修改，不得用于商业目的；公开分发改编材料时，应依该许可证以相同方式共享。
+3. 上述两项许可分别适用于不同类别的材料，构成分域授权，不构成可任选其一的双重许可（dual license）。同一材料的接收者不得在两项许可之间自行选择：代码不因本协议而适用 CC BY-NC-SA 4.0，美术、文档与文字资源也不因本协议而适用 PolyForm Noncommercial License 1.0.0。
+4. 某一文件或材料另有明确许可或版权声明时，以该文件或材料的声明为准。第三方内容不因被包含、调用、链接或随软件分发而纳入上述自研材料许可范围。
+5. 本节仅概述主要许可边界，不能替代正式许可文本。如本节与正式文本不一致，以相应官方许可文本为准：
+   PolyForm Noncommercial License 1.0.0：https://polyformproject.org/licenses/noncommercial/1.0.0
+   CC BY-NC-SA 4.0：https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Required Notice: Copyright (c) 2026 FengchenWD (风尘WD).
 
 三、著作权与第三方权利
 
 1. AI 辅助本身不当然改变作者对其具有独创性的人类创作、选择、编排、修改及整合部分享有的著作权和相关权利；具体权利范围以适用法律认定为准。
-2. 在法律允许范围内，作者保留对软件功能说明、本协议未尽事项以及后续版本的解释和更新权。该约定不限制用户依法享有的权利，也不改变已经依据 CC BY-NC-SA 4.0 合法取得且依约行使的许可权利。
-3. Minecraft、CurseForge、Modrinth、各加载器、模组、资源包、光影包、整合包内容、第三方库、商标及服务分别归其权利人所有，并适用各自的许可、用户协议与规则。本软件的许可不代表作者有权再次许可这些第三方内容。
+2. 在法律允许范围内，作者保留对软件功能说明、本协议未尽事项及后续版本的解释和更新权。该约定不限制用户依法享有的权利，也不改变用户已经按照相应材料所属许可合法取得并依约行使的权利。
+3. Minecraft、CurseForge、Modrinth、各加载器、模组、资源包、光影包、整合包内容、.NET 运行时、第三方库、商标及服务分别归其权利人所有，并继续适用各自的许可证、用户协议与规则。本协议不会替代、修改或重新许可任何第三方内容；随附的第三方许可与版权声明应予保留。
 
 四、使用条件与用户责任
 
@@ -68,7 +70,7 @@ public static class AgreementContent
 
 七、协议更新与其他
 
-1. 作者可随软件功能、许可说明或合规要求更新本协议。协议发生实质更新时，后续版本可要求你重新阅读并同意；新协议不追溯剥夺已经依法取得的许可权利。
+1. 作者可随软件功能、许可说明或合规要求更新本协议。协议发生实质更新时，后续版本可要求你重新阅读并同意。本次及今后的许可调整仅适用于明确依新条款发布的版本或材料；你此前合法取得的特定版本或副本，继续适用取得时随附的许可，作者不追溯撤销，但旧版许可不会自动扩展至本次或后续新版本。
 2. 本协议某一条款被认定无效或不可执行时，不影响其他条款的效力。
 3. 点击同意仅表示你接受当前显示版本的协议。你可以选择不同意并退出软件。
 """;
@@ -76,7 +78,7 @@ public static class AgreementContent
     private const string TraditionalChinese = """
 《MC整合包工具用戶協議與使用須知》
 
-生效日期：2026 年 8 月 5 日
+生效日期：2026 年 8 月 17 日
 
 使用本軟件前，請完整閱讀並理解本協議。按下「我已閱讀並同意」即表示你同意受本協議約束；如不同意，請退出並停止使用本軟件。
 
@@ -90,22 +92,23 @@ public static class AgreementContent
    Minecraft EULA：https://www.minecraft.net/eula
    Minecraft Usage Guidelines：https://www.minecraft.net/usage-guidelines
 
-二、許可協議（CC BY-NC-SA 4.0）
+二、分域許可與非雙重許可
 
-1. 本軟件由作者依據「共享創意 姓名標示—非商業性—相同方式分享 4.0 國際許可協議」（CC BY-NC-SA 4.0）免費許可及發佈。
-2. 在遵守許可條件的前提下，你可以複製、分享及轉載本軟件，也可以修改、改編並基於本軟件創作。
-3. 姓名標示（BY）：分享或修改時，應以合理方式標示軟件名稱及作者帳戶名「风尘WD」，提供本許可協議連結，保留已有版權及許可說明，並說明是否作出修改；不得暗示作者為你的版本、用途或行為背書。
-4. 非商業性使用（NC）：不得將本軟件或其修改版本主要用於獲取商業利益或金錢報酬。商業授權需要另行取得作者明確許可。
-5. 相同方式共享（SA）：公開發佈修改版本或演繹作品時，應繼續採用 CC BY-NC-SA 4.0 或該許可允許的兼容許可。
-6. 不得附加法律條款、數碼版權管理措施或其他技術限制，以阻止接收者行使本許可已授予的權利。
-7. 上述內容只屬主要條款摘要，不能取代許可協議法律文本。如摘要與正式文本不一致，以官方協議原文為準：
-   https://creativecommons.org/licenses/by-nc-sa/4.0/
+1. 除非另有明確標示或屬於第三方內容，作者擁有並有權授權的自研程式碼，包括原始碼、XAML 與專案檔案、建置指令碼、測試程式碼及其編譯形式，依據 PolyForm Noncommercial License 1.0.0 授權。你只可在該許可允許的非商業用途及條件範圍內使用、複製、修改及發佈相關程式碼或程式；任何商業用途均須事先取得作者另行發出的書面授權。
+2. 除非另有明確標示或屬於第三方內容，作者擁有並有權授權的自研文件、說明文字、Logo、圖像及其他美術資源，依據「共享創意 姓名標示—非商業性—相同方式分享 4.0 國際許可協議」（CC BY-NC-SA 4.0）授權。分享或改編這些材料時，應合理標示作者「风尘WD」、提供許可連結、註明是否修改，不得作商業用途；公開發佈改編材料時，應按該許可以相同方式分享。
+3. 上述兩項許可分別適用於不同類別的材料，構成分域授權，並非可任選其一的雙重許可（dual license）。同一材料的接收者不得在兩項許可之間自行選擇：程式碼不因本協議而適用 CC BY-NC-SA 4.0，美術、文件及文字資源亦不因本協議而適用 PolyForm Noncommercial License 1.0.0。
+4. 個別檔案或材料另有明確許可或版權聲明時，以該檔案或材料的聲明為準。第三方內容不會因被包含、調用、連結或隨軟件發佈而納入上述自研材料的許可範圍。
+5. 本節只概述主要許可界限，不能取代正式許可文本。如本節與正式文本不一致，以相應官方許可文本為準：
+   PolyForm Noncommercial License 1.0.0：https://polyformproject.org/licenses/noncommercial/1.0.0
+   CC BY-NC-SA 4.0：https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Required Notice: Copyright (c) 2026 FengchenWD (风尘WD).
 
 三、版權與第三方權利
 
 1. AI 輔助本身不當然改變作者對其具有獨創性的人類創作、選擇、編排、修改及整合部分享有的版權及相關權利；具體權利範圍以適用法律認定為準。
-2. 在法律允許的範圍內，作者保留對軟件功能說明、本協議未盡事項及後續版本的解釋和更新權。此約定不限制用戶依法享有的權利，亦不改變已經依據 CC BY-NC-SA 4.0 合法取得並按約行使的許可權利。
-3. Minecraft、CurseForge、Modrinth、各載入器、模組、資源包、光影包、整合包內容、第三方程式庫、商標及服務分別歸其權利人所有，並適用各自的許可、用戶協議及規則。本軟件的許可不代表作者有權再次許可這些第三方內容。
+2. 在法律允許的範圍內，作者保留對軟件功能說明、本協議未盡事項及後續版本的解釋和更新權。此約定不限制用戶依法享有的權利，亦不改變用戶已按相應材料所屬許可合法取得並依約行使的權利。
+3. Minecraft、CurseForge、Modrinth、各載入器、模組、資源包、光影包、整合包內容、.NET 執行階段、第三方程式庫、商標及服務分別歸其權利人所有，並繼續適用各自的許可、用戶協議及規則。本協議不會取代、修改或重新授權任何第三方內容；隨附的第三方許可及版權聲明應予保留。
 
 四、使用條件與用戶責任
 
@@ -129,7 +132,7 @@ public static class AgreementContent
 
 七、協議更新與其他
 
-1. 作者可因應軟件功能、許可說明或合規要求更新本協議。協議有實質更新時，後續版本可要求你重新閱讀並同意；新協議不追溯剝奪已經依法取得的許可權利。
+1. 作者可因應軟件功能、許可說明或合規要求更新本協議。協議有實質更新時，後續版本可要求你重新閱讀並同意。本次及日後的許可調整只適用於明確按新條款發佈的版本或材料；你此前合法取得的特定版本或副本，繼續適用取得時隨附的許可，作者不會追溯撤銷，但舊版許可不會自動延伸至本次或後續新版本。
 2. 本協議任何條款被認定無效或不可執行時，不影響其他條款的效力。
 3. 按下同意只表示你接受目前顯示版本的協議。你可以選擇不同意並退出軟件。
 """;
@@ -137,7 +140,7 @@ public static class AgreementContent
     private const string English = """
 MC Modpack Tool User Agreement and Important Information
 
-Effective date: August 5, 2026
+Effective date: August 17, 2026
 
 Read and understand this agreement in full before using the application. Clicking "I Have Read and Agree" means that you agree to be bound by it. If you do not agree, exit and stop using the application.
 
@@ -151,22 +154,23 @@ Read and understand this agreement in full before using the application. Clickin
    Minecraft EULA: https://www.minecraft.net/eula
    Minecraft Usage Guidelines: https://www.minecraft.net/usage-guidelines
 
-2. License (CC BY-NC-SA 4.0)
+2. License by Material Type; No Dual Licensing
 
-1. The author licenses and distributes this application free of charge under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International license (CC BY-NC-SA 4.0).
-2. Subject to the license terms, you may copy, share, and redistribute the application, and may remix, transform, and build upon it.
-3. Attribution (BY): When sharing or modifying the application, give appropriate credit to the application and its author, FengchenWD, provide a link to the license, retain existing copyright and license notices, and indicate whether changes were made. You may not imply that the author endorses your version, use, or conduct.
-4. NonCommercial (NC): You may not use the application or a modified version primarily for commercial advantage or monetary compensation. Commercial licensing requires separate, express permission from the author.
-5. ShareAlike (SA): If you publicly distribute a modified version or derivative work, you must use CC BY-NC-SA 4.0 or a compatible license permitted by it.
-6. You may not impose additional legal terms, digital rights management, or technological restrictions that prevent recipients from exercising rights granted by the license.
-7. The text above summarizes major terms and does not replace the legal code. If the summary conflicts with the official license, the official license controls:
-   https://creativecommons.org/licenses/by-nc-sa/4.0/
+1. Unless expressly marked otherwise or owned by a third party, original code that the author owns and has authority to license—including source code, XAML and project files, build scripts, tests, and compiled forms—is licensed under the PolyForm Noncommercial License 1.0.0. You may use, copy, modify, and distribute that code or software only for purposes and subject to conditions permitted by that license. Any commercial use requires a separate prior written license from the author.
+2. Unless expressly marked otherwise or owned by a third party, original author-owned documentation, explanatory text, logos, images, and other artwork are licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International license (CC BY-NC-SA 4.0). When sharing or adapting those materials, give appropriate credit to FengchenWD (风尘WD), provide the license link, indicate whether changes were made, and do not use them for commercial purposes. Publicly distributed adaptations must be shared alike as required by that license.
+3. These licenses apply to different categories of material. This is licensing by material type, not a dual-license model under which either license may be chosen. A recipient may not choose between the two licenses for the same material: code is not licensed under CC BY-NC-SA 4.0 by this agreement, and artwork, documentation, and text resources are not licensed under the PolyForm Noncommercial License 1.0.0 by this agreement.
+4. An express license or copyright notice attached to a particular file or material controls for that file or material. Third-party content does not become covered by either license merely because it is included, invoked, linked, or distributed with the application.
+5. This section summarizes the principal licensing boundaries and does not replace the legal terms. If this summary conflicts with an official license, the applicable official license controls:
+   PolyForm Noncommercial License 1.0.0: https://polyformproject.org/licenses/noncommercial/1.0.0
+   CC BY-NC-SA 4.0: https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Required Notice: Copyright (c) 2026 FengchenWD (风尘WD).
 
 3. Copyright and Third-Party Rights
 
 1. AI assistance does not by itself alter copyright or related rights in the author's original human-created expression, selection, arrangement, modification, and integration. The exact scope of rights is determined under applicable law.
-2. To the extent permitted by law, the author retains the right to explain and update application functionality, matters not covered by this agreement, and later releases. This provision does not restrict rights granted to users by law and does not alter license rights lawfully obtained and exercised under CC BY-NC-SA 4.0.
-3. Minecraft, CurseForge, Modrinth, loaders, mods, resource packs, shader packs, modpack content, third-party libraries, trademarks, and services belong to their respective rights holders and are governed by their own licenses, agreements, and rules. This application's license does not mean that the author can relicense third-party content.
+2. To the extent permitted by law, the author retains the right to explain and update application functionality, matters not covered by this agreement, and later releases. This provision does not restrict rights granted by law and does not alter rights that a user has lawfully obtained and exercises under the license applicable to the relevant material.
+3. Minecraft, CurseForge, Modrinth, loaders, mods, resource packs, shader packs, modpack content, the .NET runtime, third-party libraries, trademarks, and services belong to their respective rights holders and remain governed by their own licenses, agreements, and rules. This agreement does not replace, modify, or relicense third-party content. Accompanying third-party license and copyright notices must be retained.
 
 4. Conditions of Use and User Responsibility
 
@@ -190,7 +194,7 @@ Read and understand this agreement in full before using the application. Clickin
 
 7. Updates and Other Terms
 
-1. The author may update this agreement as application functionality, licensing information, or compliance requirements change. A later release may require renewed acceptance after a material update. A new agreement does not retroactively remove license rights already obtained under law.
+1. The author may update this agreement as application functionality, licensing information, or compliance requirements change. A later release may require renewed acceptance after a material update. This and future license changes apply only to versions or materials expressly released under the new terms. A specific version or copy that you lawfully obtained earlier remains governed by the license supplied when you obtained it and that license will not be retroactively revoked; however, an earlier license does not automatically extend to this or any later version.
 2. If any provision is found invalid or unenforceable, the remaining provisions remain effective.
 3. Clicking agree means only that you accept the version currently displayed. You may decline and exit the application.
 """;

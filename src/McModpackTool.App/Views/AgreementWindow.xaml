@@ -103,10 +103,22 @@
 
                 <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,8,8" Padding="18,12">
                     <Grid>
-                        <Button HorizontalAlignment="Left" Style="{StaticResource FluentButtonStyle}" Click="License_Click">
-                            <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE71B;" Margin="0,0,7,0" /><TextBlock Text="{Binding [agreement.license]}" /></StackPanel>
-                        </Button>
-                        <StackPanel x:Name="DecisionButtons" HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <WrapPanel HorizontalAlignment="Left">
+                            <Button Margin="0,0,8,8" Style="{StaticResource FluentButtonStyle}" Click="CodeLicense_Click">
+                                <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE71B;" Margin="0,0,7,0" /><TextBlock Text="{Binding [agreement.code_license]}" /></StackPanel>
+                            </Button>
+                            <Button Margin="0,0,8,8" Style="{StaticResource FluentButtonStyle}" Click="AssetLicense_Click">
+                                <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE71B;" Margin="0,0,7,0" /><TextBlock Text="{Binding [agreement.asset_license]}" /></StackPanel>
+                            </Button>
+                            <Button Margin="0,0,0,8" Style="{StaticResource FluentButtonStyle}" Click="ThirdPartyNotices_Click">
+                                <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE946;" Margin="0,0,7,0" /><TextBlock Text="{Binding [agreement.third_party]}" /></StackPanel>
+                            </Button>
+                        </WrapPanel>
+                        <StackPanel x:Name="DecisionButtons" Grid.Row="1" Margin="0,2,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
                             <Button x:Name="DeclineButton" Style="{StaticResource DangerButtonStyle}" Margin="0,0,9,0" Click="Decline_Click" Content="{Binding [agreement.decline]}" />
                             <Button x:Name="AcceptButton" Style="{StaticResource PrimaryButtonStyle}" Click="Accept_Click" Content="{Binding [agreement.accept]}" />
                             <Button x:Name="CloseButton" Visibility="Collapsed" Style="{StaticResource PrimaryButtonStyle}" Click="Accept_Click" Content="{Binding [agreement.close]}" />

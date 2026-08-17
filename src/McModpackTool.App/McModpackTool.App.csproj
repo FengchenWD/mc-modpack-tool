@@ -21,5 +21,11 @@
     <ProjectReference Include="..\McModpackTool.Core\McModpackTool.Core.csproj" />
     <Resource Include="Assets\mc_modpack_tool.png" Condition="Exists('Assets\mc_modpack_tool.png')" />
     <Resource Include="Assets\fengchenwd_avatar.png" Condition="Exists('Assets\fengchenwd_avatar.png')" />
+    <EmbeddedResource Include="..\..\THIRD_PARTY_LICENSES\DotNet-10.0.10-LICENSE.txt"
+                      LogicalName="McModpackTool.Legal.DotNetLicense.txt" />
+    <EmbeddedResource Include="..\..\THIRD_PARTY_LICENSES\DotNet-WindowsDesktop-10.0.10-LICENSE.txt"
+                      LogicalName="McModpackTool.Legal.DotNetWindowsDesktopLicense.txt" />
+    <EmbeddedResource Include="..\..\THIRD_PARTY_LICENSES\DotNet-Runtime-10.0.10-THIRD-PARTY-NOTICES.txt"
+                      LogicalName="McModpackTool.Legal.DotNetThirdPartyNotices.txt" />
   </ItemGroup>
 </Project>

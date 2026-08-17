@@ -61,3 +61,11 @@
 首次运行时，软件会显示完整的[《用户协议与使用须知》](告示和教程/USER_AGREEMENT.md)。只有点击“我已阅读并同意”后才能进入主页；
 
 同意状态以版本号记录在当前用户本机的 `.mc_pack_migrator_config.json` 中，协议发生实质更新时可以要求重新确认。主页右下角的“用户协议”按钮可随时重新查看正文。
+
+本项目按材料类型分域授权，不提供可任选其一的双重许可：
+
+- 作者拥有并有权授权的自研代码、XAML、项目与构建文件、测试及其编译形式，适用 [PolyForm Noncommercial License 1.0.0](LICENSE)；
+- 作者拥有并有权授权的自研美术、Logo、图像、文档和文字资源，适用 [CC BY-NC-SA 4.0](LICENSE-ASSETS.md)；
+- 第三方组件和内容继续适用各自许可，详见 [第三方组件许可与通知](THIRD_PARTY_NOTICES.md)。
+
+完整的材料范围、非双重许可说明和历史版本边界见 [NOTICE.md](NOTICE.md)。PolyForm Noncommercial 是非商业源码许可，并非 OSI 认可的开源许可证。
