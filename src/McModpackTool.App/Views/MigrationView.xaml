@@ -119,11 +119,14 @@
                                   PreviewMouseRightButtonDown="FilesGrid_PreviewMouseRightButtonDown"
                                   PreviewKeyDown="FilesGrid_PreviewKeyDown">
                             <DataGrid.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="{Binding [action.exclude], Source={x:Static app:App.Localization}}" Click="ToggleExclude_Click" />
-                                    <Separator />
-                                    <MenuItem Header="CurseForge" Click="OpenCurseForge_Click" />
-                                    <MenuItem Header="Modrinth" Click="OpenModrinth_Click" />
+                                <ContextMenu Style="{StaticResource CompactContextMenuStyle}">
+                                    <MenuItem Style="{StaticResource CompactContextMenuItemStyle}"
+                                              Header="{Binding [action.exclude], Source={x:Static app:App.Localization}}" Click="ToggleExclude_Click" />
+                                    <Separator Style="{StaticResource ContextMenuSeparatorStyle}" />
+                                    <MenuItem Style="{StaticResource CompactContextMenuItemStyle}"
+                                              Header="{Binding [action.open_curseforge], Source={x:Static app:App.Localization}}" Click="OpenCurseForge_Click" />
+                                    <MenuItem Style="{StaticResource CompactContextMenuItemStyle}"
+                                              Header="{Binding [action.open_modrinth], Source={x:Static app:App.Localization}}" Click="OpenModrinth_Click" />
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
                             <DataGrid.Columns>

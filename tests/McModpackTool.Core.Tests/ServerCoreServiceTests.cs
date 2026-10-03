@@ -16,6 +16,7 @@ public static class ServerCoreServiceTests
         await ForgeProvidersUseVerifiedBuildsAsync();
         await CatServerRequiresExactEmbeddedForgeAsync();
         await LegacyNeoForgeUsesOfficialForgeArtifactAsync();
+        await NeoForgeFallsBackToBmclApiMirrorAsync();
         await NeoForgeInstallerRunsJavaAsync();
         await DirectCoreUsesPublishedJarPathAsync();
         await LegacyForgeJarIsRecognizedAsync();
@@ -362,6 +363,56 @@ public static class ServerCoreServiceTests
         }
         finally { Delete(destination); }
     }
+
+    private static async Task NeoForgeFallsBackToBmclApiMirrorAsync()
+    {
+        byte[] installer = Bytes("neoforge-mirror-installer");
+        string sha1 = Sha1(installer);
+        var requests = new List<string>();
+        using var http = new HttpClient(new StubHandler((request, _) =>
+        {
+            Uri uri = request.RequestUri!;
+            requests.Add(uri.AbsoluteUri);
+            if (uri.Host == "piston-meta.mojang.com")
+            {
+                return Missing();
+            }
+            if (uri.Host == "maven.neoforged.net")
+            {
+                throw new HttpRequestException("Official NeoForge Maven is unreachable.");
+            }
+            if (uri.Host == "bmclapi2.bangbang93.com"
+                && uri.AbsolutePath.EndsWith("/maven-metadata.xml", StringComparison.Ordinal))
+            {
+                return Text(
+                    "<metadata><versioning><versions><version>21.1.235</version></versions></versioning></metadata>",
+                    "application/xml");
+            }
+            if (uri.Host == "bmclapi2.bangbang93.com"
+                && uri.AbsolutePath.EndsWith("installer.jar.sha1", StringComparison.Ordinal))
+            {
+                return Text(sha1, "text/plain");
+            }
+            return Missing();
+        }));
+        using var service = new ServerCoreService(http);
+        ServerCoreCatalogResult catalog = await service.GetAvailableAsync(new ServerCoreQuery
+        {
+            MinecraftVersion = "1.21.1", LoaderType = "neoforge", LoaderVersion = "21.1.235",
+        });
+
+        ServerCoreOption option = catalog.Options.Single(item => item.Id == ServerCoreIds.NeoForge);
+        Equal("21.1.235", option.LoaderVersion, "NeoForge mirror changed the requested loader version.");
+        True(option.Artifacts.Single().DownloadUrl.Equals(
+                "https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/21.1.235/neoforge-21.1.235-installer.jar",
+                StringComparison.Ordinal),
+            "NeoForge did not use the verified mirror artifact.");
+        True(requests.Any(url => url.StartsWith(NeoForgeOfficialPrefix, StringComparison.Ordinal)),
+            "NeoForge did not prefer its official Maven source.");
+    }
+
+    private const string NeoForgeOfficialPrefix =
+        "https://maven.neoforged.net/releases/net/neoforged/neoforge/";
 
     private static async Task FailedHashDoesNotPublishArtifactAsync()
     {

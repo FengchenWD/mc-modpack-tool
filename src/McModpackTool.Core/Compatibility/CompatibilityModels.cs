@@ -54,6 +54,12 @@ public sealed record CompatibilityRelation
     public string ExactReference { get; init; } = string.Empty;
 
     /// <summary>
+    /// Loader-declared side for this relation. Forge/NeoForge values are normalized to
+    /// <c>client</c>, <c>server</c>, or <c>both</c>; empty means the loader did not declare one.
+    /// </summary>
+    public string Side { get; init; } = string.Empty;
+
+    /// <summary>
     /// A Fabric/Quilt predicate (for example <c>&gt;=0.6.0 &lt;0.7.0</c>) or a
     /// Forge Maven range (for example <c>[0.6,0.7)</c>). Empty means any version.
     /// </summary>

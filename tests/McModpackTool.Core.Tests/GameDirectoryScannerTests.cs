@@ -13,6 +13,8 @@ public static class GameDirectoryScannerTests
         await DoesNotTreatVersionsAsInstanceContentAsync();
         await ReadsIsolatedFabricInstanceAsync();
         await ReadsOtherLoaderCoordinatesAsync();
+        await ReadsMergedNeoForgeArgumentsAsync();
+        await ReadsLauncherComponentNeoForgeMetadataAsync();
         await ReturnsMultipleRootVersionCandidatesAsync();
     }
 
@@ -173,11 +175,81 @@ public static class GameDirectoryScannerTests
         }
     }
 
+    private static async Task ReadsMergedNeoForgeArgumentsAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            var instance = Path.Combine(root, "versions", "Custom NeoForge Profile");
+            Directory.CreateDirectory(Path.Combine(instance, "mods"));
+            await WriteVersionAsync(
+                Path.Combine(instance, "Custom NeoForge Profile.json"),
+                "Custom NeoForge Profile",
+                clientVersion: "1.21.1",
+                libraries: ["net.neoforged.fancymodloader:loader:4.0.42"],
+                gameArguments:
+                [
+                    "--fml.neoForgeVersion",
+                    "21.1.235",
+                    "--fml.fmlVersion",
+                    "4.0.42",
+                    "--fml.mcVersion",
+                    "1.21.1",
+                ]);
+
+            ServerVersionCandidate candidate = (await GameDirectoryScanner.DiscoverAsync(instance))
+                .VersionCandidates.Single();
+
+            AssertEqual("1.21.1", candidate.MinecraftVersion,
+                "Minecraft clientVersion was not read from merged NeoForge metadata.");
+            AssertEqual("neoforge", candidate.LoaderType,
+                "Merged NeoForge metadata was not identified from its FML launch arguments.");
+            AssertEqual("21.1.235", candidate.LoaderVersion,
+                "Merged NeoForge loader version was not read from --fml.neoForgeVersion.");
+
+            ServerPackSource source = await GameDirectoryScanner.ReadAsync(instance, candidate);
+            AssertEqual("neoforge", source.LoaderType,
+                "The detected NeoForge loader was not retained in the server-pack source.");
+            AssertEqual("21.1.235", source.LoaderVersion,
+                "The detected NeoForge version was not retained in the server-pack source.");
+        });
+    }
+
+    private static async Task ReadsLauncherComponentNeoForgeMetadataAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            string instance = Path.Combine(root, "versions", "Component Profile");
+            Directory.CreateDirectory(Path.Combine(instance, "mods"));
+            string metadataPath = Path.Combine(instance, "Component Profile.json");
+            var metadata = new JsonObject
+            {
+                ["id"] = "Component Profile",
+                ["components"] = new JsonArray
+                {
+                    new JsonObject { ["uid"] = "net.minecraft", ["version"] = "1.21.1" },
+                    new JsonObject { ["uid"] = "net.neoforged", ["version"] = "21.1.235" },
+                },
+            };
+            await File.WriteAllTextAsync(metadataPath, metadata.ToJsonString());
+
+            ServerVersionCandidate candidate = (await GameDirectoryScanner.DiscoverAsync(instance))
+                .VersionCandidates.Single();
+            AssertEqual("1.21.1", candidate.MinecraftVersion,
+                "Launcher component metadata did not provide the Minecraft version.");
+            AssertEqual("neoforge", candidate.LoaderType,
+                "Launcher component metadata did not identify NeoForge.");
+            AssertEqual("21.1.235", candidate.LoaderVersion,
+                "Launcher component metadata did not retain the NeoForge version.");
+        });
+    }
+
     private static async Task WriteVersionAsync(
         string path,
         string id,
         string inheritsFrom = "",
-        IReadOnlyList<string>? libraries = null)
+        IReadOnlyList<string>? libraries = null,
+        string clientVersion = "",
+        IReadOnlyList<string>? gameArguments = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var libraryNodes = new JsonArray();
@@ -191,6 +263,19 @@ public static class GameDirectoryScannerTests
             ["mainClass"] = "net.minecraft.client.main.Main",
             ["libraries"] = libraryNodes,
         };
+        if (clientVersion.Length > 0)
+        {
+            metadata["clientVersion"] = clientVersion;
+        }
+        if (gameArguments is not null)
+        {
+            metadata["arguments"] = new JsonObject
+            {
+                ["game"] = new JsonArray(gameArguments
+                    .Select(argument => JsonValue.Create(argument))
+                    .ToArray()),
+            };
+        }
         if (inheritsFrom.Length > 0)
         {
             metadata["inheritsFrom"] = inheritsFrom;

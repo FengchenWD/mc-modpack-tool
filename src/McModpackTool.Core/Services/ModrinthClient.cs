@@ -20,7 +20,7 @@ public sealed class ModrinthClient : IDisposable
 
     public ModrinthClient(
         HttpClient? httpClient = null,
-        string userAgent = "FengchenWD/MCPackMigrator/1.0.0-beta.1",
+        string userAgent = "FengchenWD/MCPackMigrator/1.0.0-beta.6.1",
         TimeSpan? requestTimeout = null)
     {
         _ownsHttpClient = httpClient is null;
@@ -36,6 +36,15 @@ public sealed class ModrinthClient : IDisposable
             $"/project/{Uri.EscapeDataString(projectId)}",
             null,
             "Modrinth 项目接口返回了意外的数据格式。",
+            cancellationToken);
+
+    public Task<ModrinthVersion> GetVersionAsync(
+        string versionId,
+        CancellationToken cancellationToken = default) =>
+        GetRequiredAsync<ModrinthVersion>(
+            $"/version/{Uri.EscapeDataString(versionId)}",
+            null,
+            "Modrinth 版本接口返回了意外的数据格式。",
             cancellationToken);
 
     /// <summary>
@@ -203,11 +212,20 @@ public sealed class ModrinthClient : IDisposable
             .FirstOrDefault();
     }
 
-    public static string MakeProjectUrl(string? projectId = null, string? slug = null)
+    public static string MakeProjectUrl(
+        string? projectId = null,
+        string? slug = null,
+        string projectType = "mod")
     {
         var identity = !string.IsNullOrWhiteSpace(projectId) ? projectId : slug;
+        string route = projectType.ToLowerInvariant() switch
+        {
+            "resourcepack" or "resource_pack" => "resourcepack",
+            "shader" or "shaderpack" or "shader_pack" => "shader",
+            _ => "mod",
+        };
         return !string.IsNullOrWhiteSpace(identity)
-            ? $"https://modrinth.com/mod/{Uri.EscapeDataString(identity)}"
+            ? $"https://modrinth.com/{route}/{Uri.EscapeDataString(identity)}"
             : "https://modrinth.com/search";
     }
 

@@ -60,6 +60,10 @@ public partial class ServerView
         MinecraftVersionBox.Text = sourceMinecraft;
         LoaderVersionBox.Text = sourceLoaderVersion;
 
+        ConfirmUnknownMods();
+        RefreshRequiredModSelection();
+        ConfirmDisabledMods();
+        RefreshJavaRecommendation();
         InvalidatePreparation();
         CancellationToken cancellationToken = BeginOperation();
         SetWorking(true, "server.preparing", indeterminate: true);
@@ -115,6 +119,65 @@ public partial class ServerView
             SetWorking(false);
             EndOperation();
         }
+    }
+
+    private void ConfirmDisabledMods()
+    {
+        if (_source is null) return;
+        ServerModRow[] disabled = _modRows.Where(row => row.Entry.Disabled).ToArray();
+        if (disabled.Length == 0) return;
+
+        string names = string.Join(Environment.NewLine, disabled.Take(30).Select(row => "- " + row.Name));
+        if (disabled.Length > 30)
+            names += Environment.NewLine + App.Localization.Translate("server.unknown_more", disabled.Length - 30);
+        bool selected = MessageBox.Show(
+            App.Localization.Translate("server.disabled_confirm", disabled.Length, names),
+            App.Localization["server.disabled_title"], MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        _suppressModSelectionRefresh = true;
+        try
+        {
+            foreach (ServerModRow row in disabled) row.Selected = selected;
+        }
+        finally
+        {
+            _suppressModSelectionRefresh = false;
+        }
+        Log("INFO", $"用户已{(selected ? "选择打包" : "选择不打包")} {disabled.Length} 个禁用模组，保留禁用后缀。");
+    }
+
+    private void ConfirmUnknownMods()
+    {
+        if (_source is null) return;
+        ServerModEntry[] unknown = _source.Mods
+            .Where(entry => !entry.Disabled && entry.ServerSupport == ServerSupportKinds.Unknown)
+            .ToArray();
+        if (unknown.Length == 0) return;
+
+        string names = string.Join(
+            Environment.NewLine,
+            unknown.Take(30).Select(entry => "- " + entry.Name));
+        if (unknown.Length > 30)
+            names += Environment.NewLine + App.Localization.Translate("server.unknown_more", unknown.Length - 30);
+        MessageBoxResult result = MessageBox.Show(
+            App.Localization.Translate("server.unknown_confirm", unknown.Length, names),
+            App.Localization["server.unknown_title"],
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        bool selected = result == MessageBoxResult.Yes;
+        _suppressModSelectionRefresh = true;
+        try
+        {
+            foreach (ServerModRow row in _modRows.Where(row =>
+                         row.Entry.ServerSupport == ServerSupportKinds.Unknown && !row.Entry.Disabled))
+            {
+                row.Selected = selected;
+            }
+        }
+        finally
+        {
+            _suppressModSelectionRefresh = false;
+        }
+        Log("INFO", $"用户已{(selected ? "选择加入" : "选择排除")} {unknown.Length} 个服务端适用性未知的模组。");
     }
 
     private async Task<CompatibilitySnapshot> CreateCompatibilitySnapshotAsync(
@@ -479,6 +542,23 @@ public partial class ServerView
         bool eulaAccepted = MessageBox.Show(
             App.Localization["server.dialog.eula"], App.Localization["common.warning"],
             MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        bool deepValidate = false;
+        if (eulaAccepted)
+        {
+            deepValidate = MessageBox.Show(
+                App.Localization["server.dialog.runtime_validation"],
+                App.Localization["common.warning"],
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        }
+        else
+        {
+            MessageBox.Show(
+                App.Localization["server.dialog.runtime_validation_skipped"],
+                App.Localization["common.warning"],
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
         string? javaExecutable = await ResolveJavaExecutableAsync();
         if (javaExecutable is null)
         {
@@ -498,6 +578,7 @@ public partial class ServerView
             IncludedOptionalDirectories = optional,
             World = (WorldCombo.SelectedItem as WorldRow)?.World,
             EulaAccepted = eulaAccepted,
+            DeepValidate = deepValidate,
             Overwrite = overwrite,
         };
 
@@ -517,6 +598,7 @@ public partial class ServerView
                     ServerBuildPhase.CopyingMods => "server.building_mods_copy",
                     ServerBuildPhase.DownloadingMods => "server.building_mods_download",
                     ServerBuildPhase.CopyingConfiguration => "server.building_config",
+                    ServerBuildPhase.ValidatingRuntime => "server.building_validation",
                     ServerBuildPhase.CopyingWorld => "server.building_world",
                     ServerBuildPhase.WritingLaunchFiles => "server.building_files",
                     ServerBuildPhase.CompressingArchive => "server.building_archive",
@@ -543,7 +625,10 @@ public partial class ServerView
             }
             cancellationToken.ThrowIfCancellationRequested();
             SetStatus("server.build_complete");
-            string message = $"{App.Localization["server.build_complete"]}\n\n{App.Localization["server.build_launch_hint"]}\n\n{App.Localization.Translate("build.location", outputPath)}";
+            string validationMessage = result.RuntimeValidated
+                ? App.Localization["server.runtime_validated"]
+                : App.Localization["server.runtime_not_validated"];
+            string message = $"{App.Localization["server.build_complete"]}\n\n{validationMessage}\n\n{App.Localization["server.build_launch_hint"]}\n\n{App.Localization.Translate("build.location", outputPath)}";
             new BuildSuccessWindow(message, outputPath) { Owner = Window.GetWindow(this) }.ShowDialog();
             Log("INFO", $"Server ZIP complete: {outputPath}");
         }

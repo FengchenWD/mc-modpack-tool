@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using McModpackTool.Core.Models;
@@ -103,6 +104,7 @@ public partial class ClientPackView
 
     private void ApplySource(ClientPackSource source, string inputPath)
     {
+        _platformMatchCache.Clear();
         _source = source;
         _readPath = Path.GetFullPath(inputPath);
         _applyingSource = true;
@@ -143,6 +145,7 @@ public partial class ClientPackView
 
     private void ClearSourceState()
     {
+        _platformMatchCache.Clear();
         _source = null;
         _readPath = string.Empty;
         _defaultSelections.Clear();
@@ -237,6 +240,78 @@ public partial class ClientPackView
         _operationCts?.Cancel();
         SetStatus("status.canceling");
     }
+
+    private async void OpenClientPlatform_Click(object sender, RoutedEventArgs e)
+    {
+        if (_working || sender is not MenuItem
+            {
+                DataContext: ClientContentRow { CanOpenProject: true } row,
+                Tag: string platform,
+            })
+        {
+            return;
+        }
+
+        var cacheKey = (row.Entry, platform);
+        if (!_platformMatchCache.TryGetValue(cacheKey, out ClientPlatformProjectMatch? match))
+        {
+            CancellationToken cancellationToken = BeginOperation();
+            SetWorking(true, "client.platform_lookup", indeterminate: true);
+            try
+            {
+                match = await _builder.ResolvePlatformProjectAsync(row.Entry, platform, cancellationToken);
+                _platformMatchCache[cacheKey] = match;
+                Log("INFO", match is null
+                    ? $"Exact {platform} hash match not found: {row.Entry.RelativePath}"
+                    : $"Exact {platform} project match: {row.Entry.RelativePath} -> {match.ProjectUrl}");
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus("client.cancelled");
+                return;
+            }
+            catch (Exception exception)
+            {
+                Log("ERROR", exception.ToString());
+                MessageBox.Show(
+                    App.Localization.Translate("client.dialog.platform_lookup_failed", PlatformName(platform), row.Name),
+                    App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            finally
+            {
+                SetWorking(false);
+                EndOperation();
+                if (_source is not null && !cancellationToken.IsCancellationRequested)
+                    SetStatus("client.read_ready");
+            }
+        }
+
+        if (match is null)
+        {
+            MessageBox.Show(
+                App.Localization.Translate("client.dialog.platform_not_found", PlatformName(platform), row.Name),
+                App.Localization["common.warning"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(match.ProjectUrl) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            Log("ERROR", exception.ToString());
+            MessageBox.Show(
+                App.Localization.Translate("client.dialog.open_project_failed", PlatformName(platform)),
+                App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static string PlatformName(string platform) =>
+        platform.Equals(ClientPackFormats.CurseForge, StringComparison.OrdinalIgnoreCase)
+            ? "CurseForge"
+            : "Modrinth";
 
     private async void Build_Click(object sender, RoutedEventArgs e) => await BuildAsync();
 

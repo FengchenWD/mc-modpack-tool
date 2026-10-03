@@ -13,6 +13,7 @@ internal static class Program
             ("Compatibility analysis", CompatibilityTests.RunAllAsync),
             ("Server core catalog and installation", ServerCoreServiceTests.RunAllAsync),
             ("Server ZIP builder", ServerPackBuilderTests.RunAllAsync),
+            ("Server runtime validation", ServerRuntimeValidatorTests.RunAllAsync),
             ("Client modpack builder", ClientPackBuilderTests.RunAllAsync),
             ("Java runtime selection", JavaRuntimeTests.RunAllAsync),
             ("Game directory scanner", GameDirectoryScannerTests.RunAllAsync),

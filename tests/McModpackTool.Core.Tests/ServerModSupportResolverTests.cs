@@ -17,17 +17,124 @@ public static class ServerModSupportResolverTests
         await ReadsFabricEntrypointsAndNestedIdsAsync();
         await RetainsNestedJavaRequirementsAsync();
         await KeepsFabricApiAggregateSelectedAsync();
+        await KeepsKotlinRuntimeDespiteOptionalPlatformAsync();
+        await RefreshesDependenciesAfterUserSelectionAsync();
+        await PreservesExplicitClientLibraryExclusionAsync();
+        await PrefersExplicitServerDeclarationOverNameFallbackAsync();
         await PromotesClientEntrypointOnlyRequiredLibraryAsync();
         await DetectsUnsafeFabricCommonEntrypointReferencesAsync();
         await ReadsLegacyForgeMetadataAsync();
+        await ReadsForgeDependencySidesAndInfersClientEnvironmentAsync();
+        await IgnoresClientOnlyForgeDependenciesOnServerAsync();
+        await RejectsOwnersOfUnsupportedServerDependenciesAsync();
         await ResolvesExactPlatformSidesAndLocalFallbacksAsync();
         await InspectsFabricCandidatesInsideForgePacksAsync();
+        await ResolvesExactCurseForgeIdentitiesAndDependenciesAsync();
+        await CurseForgeFailureKeepsFallbackUsableAsync();
         await PromotesCreativeCoreRequiredByPlayerReviveAsync();
         await ResolvesManifestIdentitiesAndDependenciesAsync();
         await PlatformFailureKeepsUnknownLocalModSelectedAsync();
         await ExcludesKnownClientModsWithoutPlatformMetadataAsync();
+        await AppliesExactOfflineClientFallbacksWithoutOvermatchingAsync();
         await LocalIndustrialSampleExcludesClientModsAsync();
         await LocalForgeConnectorSampleExcludesClientModsAsync();
+        await LocalTeaShopSampleUsesOfflineServerSidesAsync();
+    }
+
+    private static async Task KeepsKotlinRuntimeDespiteOptionalPlatformAsync()
+    {
+        using var http = new HttpClient(new DelegateHandler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/v2/version_files")
+                return Task.FromResult(JsonResponse(new Dictionary<string, object>()));
+            if (request.RequestUri.AbsolutePath == "/v2/projects")
+                return Task.FromResult(JsonResponse(new[]
+                {
+                    new { id = "Ha28R6CL", slug = "fabric-language-kotlin",
+                        project_type = "mod", server_side = "optional", client_side = "optional" },
+                }));
+            throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
+        })) { BaseAddress = new Uri(ModrinthClient.BaseAddress) };
+        using var modrinth = new ModrinthClient(http);
+        var source = new ServerPackSource
+        {
+            LoaderType = "fabric",
+            Mods = [ManifestEntry("Kotlin Runtime", "Ha28R6CL", "kotlin-hash", "optional")],
+        };
+        await new ServerModSupportResolver(modrinth).ResolveAsync(source);
+        AssertSupport(source, "Kotlin Runtime", ServerSupportKinds.Recommended, selected: true);
+    }
+
+    private static async Task RefreshesDependenciesAfterUserSelectionAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            string ownerPath = Path.Combine(root, "jade.jar");
+            string libraryPath = Path.Combine(root, "malilib.jar");
+            string leafPath = Path.Combine(root, "libipn.jar");
+            string disabledPath = Path.Combine(root, "disabled.jar.disabled");
+            await CreateFabricJarAsync(ownerPath, "jade", "*", ["main"],
+                requiredDependencies: ["malilib", "disabled"]);
+            await CreateFabricJarAsync(libraryPath, "malilib", "*", ["client"],
+                requiredDependencies: ["libipn"]);
+            await CreateFabricJarAsync(leafPath, "libipn", "*", ["client"]);
+            await CreateFabricJarAsync(disabledPath, "disabled", "*", ["main"]);
+            using var http = CreateEmptyPlatformClient();
+            using var modrinth = new ModrinthClient(http);
+            var resolver = new ServerModSupportResolver(modrinth);
+            var source = new ServerPackSource
+            {
+                Mods = [LocalEntry(ownerPath), LocalEntry(libraryPath), LocalEntry(leafPath),
+                    LocalEntry(disabledPath, disabled: true)],
+            };
+            await resolver.ResolveAsync(source);
+            AssertSupport(source, ownerPath, ServerSupportKinds.Optional, selected: false);
+            AssertSupport(source, libraryPath, ServerSupportKinds.Optional, selected: false);
+            AssertSupport(source, leafPath, ServerSupportKinds.Optional, selected: false);
+            source.Mods[0].Selected = true;
+            resolver.RefreshSelectedDependencies(source);
+            AssertSupport(source, libraryPath, ServerSupportKinds.Recommended, selected: true);
+            AssertSupport(source, leafPath, ServerSupportKinds.Recommended, selected: true);
+            AssertSupport(source, disabledPath, ServerSupportKinds.Unknown, selected: false);
+            resolver.RefreshSelectedDependencies(source);
+            True(source.Mods[0].Selected, "Dependency refresh reset the user's owner selection.");
+        });
+    }
+
+    private static async Task PreservesExplicitClientLibraryExclusionAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            string libIpn = Path.Combine(root, "libIPN-fabric-1.21.1-6.6.2.jar");
+            string malilib = Path.Combine(root, "malilib-fabric-1.21-0.21.10.jar");
+            string kotlin = Path.Combine(root, "fake-kotlin.jar");
+            await CreateFabricJarAsync(libIpn, "libipn", "client", ["client"]);
+            await CreateFabricJarAsync(malilib, "malilib", "client", ["client"]);
+            await CreateFabricJarAsync(kotlin, "fabric-language-kotlin", "client", ["client"]);
+            using var http = CreateEmptyPlatformClient();
+            using var modrinth = new ModrinthClient(http);
+            var source = new ServerPackSource { Mods = [LocalEntry(libIpn), LocalEntry(malilib), LocalEntry(kotlin)] };
+            await new ServerModSupportResolver(modrinth).ResolveAsync(source);
+            foreach (string path in new[] { libIpn, malilib, kotlin })
+                AssertSupport(source, path, ServerSupportKinds.Unsupported, selected: false);
+        });
+    }
+
+    private static async Task PrefersExplicitServerDeclarationOverNameFallbackAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            string serverLibrary = Path.Combine(root, "libipn-server.jar");
+            string sharedLibrary = Path.Combine(root, "malilib-server-capable.jar");
+            await CreateFabricJarAsync(serverLibrary, "libipn", "server", ["main"]);
+            await CreateFabricJarAsync(sharedLibrary, "malilib", "*", ["client", "server"]);
+            using var http = CreateEmptyPlatformClient();
+            using var modrinth = new ModrinthClient(http);
+            var source = new ServerPackSource { Mods = [LocalEntry(serverLibrary), LocalEntry(sharedLibrary)] };
+            await new ServerModSupportResolver(modrinth).ResolveAsync(source);
+            AssertSupport(source, serverLibrary, ServerSupportKinds.Recommended, selected: true);
+            AssertSupport(source, sharedLibrary, ServerSupportKinds.Recommended, selected: true);
+        });
     }
 
     private static async Task ReadsLegacyForgeMetadataAsync()
@@ -59,6 +166,89 @@ public static class ServerModSupportResolverTests
             Equal("client", metadata.ServerEnvironment, "Legacy clientSideOnly was not retained.");
             True(metadata.Relations.Any(relation => relation.ExactReference == "forge"),
                 "Legacy requiredMods dependency was not retained.");
+        });
+    }
+
+    private static async Task ReadsForgeDependencySidesAndInfersClientEnvironmentAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            string clientPath = Path.Combine(root, "client-environment.jar");
+            await CreateForgeJarAsync(
+                clientPath,
+                "client_environment",
+                [("neoforge", "CLIENT"), ("minecraft", "CLIENT")]);
+
+            ArtifactCompatibilityMetadata client = ArtifactMetadataReader.Read(clientPath);
+            Equal("client", client.ServerEnvironment,
+                "All-client Forge environment dependencies did not infer a client-only mod.");
+            Equal("client", client.Relations.Single(relation => relation.ExactReference == "minecraft").Side,
+                "The Forge dependency side was not retained.");
+
+            string mixedPath = Path.Combine(root, "mixed-environment.jar");
+            await CreateForgeJarAsync(
+                mixedPath,
+                "mixed_environment",
+                [("neoforge", "CLIENT"), ("minecraft", "BOTH")]);
+
+            ArtifactCompatibilityMetadata mixed = ArtifactMetadataReader.Read(mixedPath);
+            Equal(string.Empty, mixed.ServerEnvironment,
+                "A BOTH environment dependency was incorrectly inferred as client-only.");
+            Equal("both", mixed.Relations.Single(relation => relation.ExactReference == "minecraft").Side,
+                "The BOTH Forge dependency side was not retained.");
+        });
+    }
+
+    private static async Task IgnoresClientOnlyForgeDependenciesOnServerAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            string ownerPath = Path.Combine(root, "safe-owner.jar");
+            string clientPath = Path.Combine(root, "client-runtime.jar");
+            await CreateForgeJarAsync(ownerPath, "safe_owner", [("client_runtime", "CLIENT")]);
+            await CreateFabricJarAsync(clientPath, "client_runtime", "client", ["client"]);
+
+            using var http = CreateEmptyPlatformClient();
+            using var modrinth = new ModrinthClient(http);
+            var source = new ServerPackSource
+            {
+                LoaderType = "neoforge",
+                Mods = [LocalEntry(ownerPath), LocalEntry(clientPath)],
+            };
+
+            await new ServerModSupportResolver(modrinth).ResolveAsync(source);
+
+            AssertSupport(source, ownerPath, ServerSupportKinds.Unknown, selected: true);
+            AssertSupport(source, clientPath, ServerSupportKinds.Unsupported, selected: false);
+        });
+    }
+
+    private static async Task RejectsOwnersOfUnsupportedServerDependenciesAsync()
+    {
+        await WithTemporaryDirectoryAsync(async root =>
+        {
+            string topPath = Path.Combine(root, "top.jar");
+            string middlePath = Path.Combine(root, "middle.jar");
+            string clientPath = Path.Combine(root, "client-runtime.jar");
+            await CreateForgeJarAsync(topPath, "top", [("middle", "SERVER")]);
+            await CreateForgeJarAsync(middlePath, "middle", [("client_runtime", "BOTH")]);
+            await CreateFabricJarAsync(clientPath, "client_runtime", "client", ["client"]);
+
+            using var http = CreateEmptyPlatformClient();
+            using var modrinth = new ModrinthClient(http);
+            var source = new ServerPackSource
+            {
+                LoaderType = "neoforge",
+                Mods = [LocalEntry(topPath), LocalEntry(middlePath), LocalEntry(clientPath)],
+            };
+
+            await new ServerModSupportResolver(modrinth).ResolveAsync(source);
+
+            AssertSupport(source, clientPath, ServerSupportKinds.Unsupported, selected: false);
+            AssertSupport(source, middlePath, ServerSupportKinds.Unsupported, selected: false);
+            AssertSupport(source, topPath, ServerSupportKinds.Unsupported, selected: false);
+            True(source.Mods.Single(entry => entry.SourcePath == topPath).SupportReason.Contains("middle.jar"),
+                "The recursive dependency blocker did not retain its immediate cause.");
         });
     }
 
@@ -452,6 +642,124 @@ public static class ServerModSupportResolverTests
         });
     }
 
+    private static async Task ResolvesExactCurseForgeIdentitiesAndDependenciesAsync()
+    {
+        using var platformHttp = CreateEmptyPlatformClient();
+        using var modrinth = new ModrinthClient(platformHttp);
+        var warnings = new List<string>();
+        using var curseForgeHttp = new HttpClient(new DelegateHandler(async (request, cancellationToken) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath == "/v1/mods/files")
+            {
+                JsonObject body = JsonNode.Parse(
+                    await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
+                Equal(3, body["fileIds"]!.AsArray().Count,
+                    "CurseForge exact file IDs were not resolved in one batch.");
+                return CurseForgeJsonResponse(new object[]
+                {
+                    new
+                    {
+                        id = 101L,
+                        modId = 201L,
+                        fileName = "generic-owner.jar",
+                        fileLength = 1010L,
+                        hashes = new[] { new { algo = 1, value = "owner-sha" } },
+                        dependencies = new[] { new { modId = 202L, relationType = 3 } },
+                    },
+                    new
+                    {
+                        id = 102L,
+                        modId = 202L,
+                        fileName = "client-runtime.jar",
+                        fileLength = 2020L,
+                        hashes = new[] { new { algo = 1, value = "runtime-sha" } },
+                        dependencies = Array.Empty<object>(),
+                    },
+                    new
+                    {
+                        id = 103L,
+                        modId = 203L,
+                        fileName = "size-mismatch.jar",
+                        fileLength = 999L,
+                        hashes = new[] { new { algo = 1, value = "mismatch-sha" } },
+                        dependencies = Array.Empty<object>(),
+                    },
+                });
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath == "/v1/mods")
+            {
+                return CurseForgeJsonResponse(new object[]
+                {
+                    new { id = 201L, name = "Generic Owner", slug = "generic-owner", classId = 6 },
+                    new { id = 202L, name = "Client Runtime", slug = "client-runtime", classId = 6 },
+                });
+            }
+            throw new InvalidOperationException($"Unexpected CurseForge request: {request.Method} {request.RequestUri}");
+        }));
+        using var curseForge = new CurseForgeClient("test-key", curseForgeHttp);
+
+        ServerModEntry owner = ManifestEntry("generic-owner", string.Empty, "owner-sha");
+        owner.ContentItem!.FileId = "101";
+        owner.ContentItem.FileSize = 1010;
+        owner.ContentItem.Source = "unknown";
+        owner.ContentItem.OriginalSource = "unknown";
+        ServerModEntry runtime = ManifestEntry("client-runtime", string.Empty, "runtime-sha", "unsupported");
+        runtime.ContentItem!.FileId = "102";
+        runtime.ContentItem.FileSize = 2020;
+        runtime.ContentItem.Source = "unknown";
+        runtime.ContentItem.OriginalSource = "unknown";
+        ServerModEntry mismatch = ManifestEntry("size-mismatch", string.Empty, "mismatch-sha");
+        mismatch.ContentItem!.FileId = "103";
+        mismatch.ContentItem.FileSize = 3030;
+        mismatch.ContentItem.Source = "unknown";
+        mismatch.ContentItem.OriginalSource = "unknown";
+        var source = new ServerPackSource { Mods = [owner, runtime, mismatch] };
+
+        await new ServerModSupportResolver(
+            modrinth,
+            warnings.Add,
+            curseForge: curseForge).ResolveAsync(source);
+
+        Equal("curseforge", owner.ContentItem.Source, "The exact CurseForge source was not retained.");
+        Equal("201", owner.ContentItem.ProjectId, "The exact CurseForge project ID was not retained.");
+        Equal("generic-owner", owner.ContentItem.CurseForgeSlug, "The CurseForge slug was not retained.");
+        True(owner.ContentItem.TargetDependencies.Any(dependency =>
+                dependency.Source == "curseforge" && dependency.ProjectId == "202" &&
+                dependency.DependencyType == "required"),
+            "The exact CurseForge required dependency was not retained.");
+        AssertSupport(source, "client-runtime", ServerSupportKinds.Unsupported, selected: false);
+        AssertSupport(source, "generic-owner", ServerSupportKinds.Unsupported, selected: false);
+        Equal("unknown", mismatch.ContentItem.Source,
+            "A size-mismatched CurseForge file was incorrectly trusted.");
+        AssertSupport(source, "size-mismatch", ServerSupportKinds.Unknown, selected: true);
+        True(warnings.Any(warning => warning.Contains("declared size", StringComparison.Ordinal)),
+            "The strict CurseForge mismatch was not reported as a warning.");
+    }
+
+    private static async Task CurseForgeFailureKeepsFallbackUsableAsync()
+    {
+        using var platformHttp = CreateEmptyPlatformClient();
+        using var modrinth = new ModrinthClient(platformHttp);
+        using var curseForgeHttp = new HttpClient(new DelegateHandler((_, _) => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))));
+        using var curseForge = new CurseForgeClient("test-key", curseForgeHttp);
+        var warnings = new List<string>();
+        ServerModEntry entry = ManifestEntry("private-server-mod", string.Empty, "private-sha");
+        entry.ContentItem!.FileId = "98765";
+        entry.ContentItem.Source = "unknown";
+        entry.ContentItem.OriginalSource = "unknown";
+        var source = new ServerPackSource { Mods = [entry] };
+
+        await new ServerModSupportResolver(
+            modrinth,
+            warnings.Add,
+            curseForge: curseForge).ResolveAsync(source);
+
+        AssertSupport(source, "private-server-mod", ServerSupportKinds.Unknown, selected: true);
+        True(warnings.Any(warning => warning.Contains("CurseForge", StringComparison.Ordinal)),
+            "A CurseForge outage was not downgraded to a warning.");
+    }
+
     private static async Task PromotesCreativeCoreRequiredByPlayerReviveAsync()
     {
         const string playerReviveHash = "player-revive-hash";
@@ -545,6 +853,10 @@ public static class ServerModSupportResolverTests
                 ManifestEntry("[体素地图] forgemod_VoxelMap-1.9.28_for_1.12.2.jar", string.Empty, "voxel-hash"),
                 ManifestEntry("preview_OptiFine_1.12.2_HD_U_G6_pre1.jar", string.Empty, "optifine-hash"),
                 ManifestEntry("[JEI物品管理器] jei_1.12.2-4.16.1.302.jar", string.Empty, "jei-hash"),
+                ManifestEntry("Jade-15.10.5.jar", "nvQzSEkH", "jade-hash"),
+                ManifestEntry("appleskin-neoforge.jar", "EsAfCjCV", "appleskin-hash"),
+                ManifestEntry("cloth-config.jar", "9s6osm5g", "cloth-hash"),
+                ManifestEntry("yet_another_config_lib_v3.jar", "1eAoo2KR", "yacl-hash"),
                 ManifestEntry("private-server-map-helper.jar", string.Empty, "private-hash"),
             ],
         };
@@ -556,9 +868,68 @@ public static class ServerModSupportResolverTests
         AssertSupport(source, "preview_OptiFine_1.12.2_HD_U_G6_pre1.jar",
             ServerSupportKinds.Unsupported, selected: false);
         AssertSupport(source, "[JEI物品管理器] jei_1.12.2-4.16.1.302.jar",
-            ServerSupportKinds.Unsupported, selected: false);
+            ServerSupportKinds.Optional, selected: false);
+        foreach (string optional in new[]
+                 {
+                     "Jade-15.10.5.jar", "appleskin-neoforge.jar", "cloth-config.jar",
+                     "yet_another_config_lib_v3.jar",
+                 })
+        {
+            AssertSupport(source, optional, ServerSupportKinds.Optional, selected: false);
+        }
         AssertSupport(source, "private-server-map-helper.jar",
             ServerSupportKinds.Unknown, selected: true);
+    }
+
+    private static async Task AppliesExactOfflineClientFallbacksWithoutOvermatchingAsync()
+    {
+        using var http = new HttpClient(new DelegateHandler((_, _) => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))))
+        {
+            BaseAddress = new Uri(ModrinthClient.BaseAddress),
+        };
+        using var modrinth = new ModrinthClient(http);
+        var source = new ServerPackSource
+        {
+            Mods =
+            [
+                ManifestEntry("[掌中明月] HandheldMoon-neoforge.jar", string.Empty, "handheld-hash"),
+                ManifestEntry("conditionalvideos-neoforge.jar", "QYxLd8Ry", "conditional-hash"),
+                ManifestEntry("epicdeathscreen-neoforge.jar", "NBq5BYpp", "death-hash"),
+                ManifestEntry("watermedia_binaries.jar", "4997XcoK", "binaries-hash"),
+                ManifestEntry("[WI变焦] WI-Zoom-1.6-MC1.21.1-NeoForge.jar", string.Empty, "zoom-hash"),
+                ManifestEntry("cadeditor.jar", "MJW1h2CF", "cad-hash"),
+                ManifestEntry("dynamic-fps.jar", "LQ3K71Q1", "fps-hash"),
+                ManifestEntry("splatter.jar", "M93DtNU5", "splatter-hash"),
+                ManifestEntry("watermedia.jar", "G922NeHS", "watermedia-hash"),
+                ManifestEntry("screen_overlay_mod.jar", string.Empty, "overlay-hash"),
+                ManifestEntry("lastnightgames-runtime.jar", string.Empty, "lastnight-hash"),
+                ManifestEntry("bbs-cml-edition.jar", "orQP37wm", "bbs-hash"),
+                ManifestEntry("SubtitleMod.jar", "E2wOuMwA", "subtitle-hash"),
+                ManifestEntry("vista-neoforge.jar", "zuARv1N7", "vista-hash"),
+            ],
+        };
+
+        await new ServerModSupportResolver(modrinth).ResolveAsync(source);
+
+        foreach (string unsupported in new[]
+                 {
+                     "[掌中明月] HandheldMoon-neoforge.jar", "conditionalvideos-neoforge.jar",
+                     "epicdeathscreen-neoforge.jar", "watermedia_binaries.jar",
+                     "[WI变焦] WI-Zoom-1.6-MC1.21.1-NeoForge.jar", "cadeditor.jar",
+                     "dynamic-fps.jar", "splatter.jar", "watermedia.jar", "screen_overlay_mod.jar",
+                 })
+        {
+            AssertSupport(source, unsupported, ServerSupportKinds.Unsupported, selected: false);
+        }
+        foreach (string retained in new[]
+                 {
+                     "lastnightgames-runtime.jar", "bbs-cml-edition.jar", "SubtitleMod.jar",
+                     "vista-neoforge.jar",
+                 })
+        {
+            AssertSupport(source, retained, ServerSupportKinds.Unknown, selected: true);
+        }
     }
 
     private static async Task LocalIndustrialSampleExcludesClientModsAsync()
@@ -582,7 +953,7 @@ public static class ServerModSupportResolverTests
 
             string[] excludedNames =
             [
-                "VoxelMap", "OptiFine", "xaerolib", "JEI", "CustomSkinLoader", "AppleSkin",
+                "VoxelMap", "OptiFine", "xaerolib", "CustomSkinLoader",
                 "InventoryTweaks", "MouseTweaks", "Hwyla", "WailaHarvestability",
                 "血条显示", "lanserverproperties",
             ];
@@ -593,6 +964,15 @@ public static class ServerModSupportResolverTests
                 Equal(ServerSupportKinds.Unsupported, entry.ServerSupport,
                     $"The local sample client mod '{entry.Name}' was not excluded.");
                 True(!entry.Selected, $"The local sample client mod '{entry.Name}' was selected.");
+            }
+
+            foreach (string expected in new[] { "JEI", "AppleSkin" })
+            {
+                ServerModEntry entry = source.Mods.Single(mod =>
+                    mod.Name.Contains(expected, StringComparison.OrdinalIgnoreCase));
+                Equal(ServerSupportKinds.Optional, entry.ServerSupport,
+                    $"The local sample convenience mod '{entry.Name}' was not optional.");
+                True(!entry.Selected, $"The local sample convenience mod '{entry.Name}' was selected.");
             }
 
             ServerModEntry waystones = source.Mods.Single(mod =>
@@ -683,6 +1063,78 @@ public static class ServerModSupportResolverTests
                 "C#",
                 "\u6d4b\u8bd5\u6837\u4f8b",
                 "\u9ad8\u67b6\u60ca\u53d8\u6574\u5408\u5305-Forge.mrpack");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+            directory = directory.Parent;
+        }
+        return null;
+    }
+
+    private static async Task LocalTeaShopSampleUsesOfflineServerSidesAsync()
+    {
+        string? samplePath = FindLocalTeaShopSample();
+        if (samplePath is null)
+        {
+            return;
+        }
+
+        string temporaryRoot = Path.Combine(Path.GetTempPath(), $"tea-shop-server-source-{Guid.NewGuid():N}");
+        using var http = new HttpClient(new DelegateHandler((_, _) => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))));
+        using var curseForge = new CurseForgeClient("test-key", http);
+        using var modrinth = new ModrinthClient(http);
+        try
+        {
+            var reader = new ServerArchiveSourceReader(curseForge);
+            ServerPackSource source = await reader.ReadAsync(samplePath, temporaryRoot);
+            await new ServerModSupportResolver(modrinth).ResolveAsync(source);
+
+            string[] excludedNames =
+            [
+                "HandheldMoon", "conditionalvideos", "epicdeathscreen", "watermedia_binaries",
+                "WI-Zoom", "cadeditor", "dynamic-fps", "splatter", "watermedia-3",
+                "iris-neoforge", "entityculling", "entity_texture_features", "lambdynamiclights",
+                "sodium-neoforge", "MouseTweaks",
+            ];
+            foreach (string expected in excludedNames)
+            {
+                ServerModEntry entry = source.Mods.Single(mod =>
+                    mod.Name.Contains(expected, StringComparison.OrdinalIgnoreCase));
+                Equal(ServerSupportKinds.Unsupported, entry.ServerSupport,
+                    $"The tea-shop sample client mod '{entry.Name}' was not excluded offline.");
+                True(!entry.Selected, $"The tea-shop sample client mod '{entry.Name}' was selected offline.");
+            }
+
+            foreach (string expected in new[] { "bbs-cml-edition", "SubtitleMod", "vista-neoforge" })
+            {
+                ServerModEntry entry = source.Mods.Single(mod =>
+                    mod.Name.Contains(expected, StringComparison.OrdinalIgnoreCase));
+                True(entry.ServerSupport != ServerSupportKinds.Unsupported,
+                    $"The tea-shop sample server-capable mod '{entry.Name}' was hard-excluded.");
+                True(entry.Selected, $"The tea-shop sample server-capable mod '{entry.Name}' was not selected.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryRoot))
+            {
+                Directory.Delete(temporaryRoot, recursive: true);
+            }
+        }
+    }
+
+    private static string? FindLocalTeaShopSample()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            string candidate = Path.Combine(
+                directory.FullName,
+                "C#",
+                "测试样例",
+                "茶店 正式版1.0.3.zip");
             if (File.Exists(candidate))
             {
                 return candidate;
@@ -832,6 +1284,33 @@ public static class ServerModSupportResolverTests
             requiredDependencyRequirements));
     }
 
+    private static async Task CreateForgeJarAsync(
+        string path,
+        string id,
+        IReadOnlyList<(string Id, string Side)> requiredDependencies)
+    {
+        var metadata = new StringBuilder()
+            .AppendLine("modLoader = \"javafml\"")
+            .AppendLine("loaderVersion = \"[1,)\"")
+            .AppendLine("[[mods]]")
+            .AppendLine($"modId = \"{id}\"")
+            .AppendLine("version = \"1.0.0\"")
+            .AppendLine($"displayName = \"{id}\"");
+        foreach ((string dependencyId, string side) in requiredDependencies)
+        {
+            metadata
+                .AppendLine($"[[dependencies.\"{id}\"]]")
+                .AppendLine($"modId = \"{dependencyId}\"")
+                .AppendLine("type = \"required\"")
+                .AppendLine("versionRange = \"[1,)\"")
+                .AppendLine($"side = \"{side}\"");
+        }
+
+        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true, Encoding.UTF8);
+        WriteEntry(archive, "META-INF/neoforge.mods.toml", Encoding.UTF8.GetBytes(metadata.ToString()));
+    }
+
     private static byte[] CreateFabricJarBytes(
         string id,
         string? environment,
@@ -974,6 +1453,11 @@ public static class ServerModSupportResolverTests
     {
         Content = new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json"),
     };
+
+    private static HttpResponseMessage CurseForgeJsonResponse(object value) => JsonResponse(new
+    {
+        data = value,
+    });
 
     private static async Task WithTemporaryDirectoryAsync(Func<string, Task> operation)
     {

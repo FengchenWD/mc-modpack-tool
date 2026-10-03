@@ -114,6 +114,10 @@ public static class ServerPackBuilderTests
             Directory.CreateDirectory(worldRoot);
             string modPath = Path.Combine(modsRoot, "example.jar");
             await File.WriteAllTextAsync(modPath, "mod");
+            string disabledPath = Path.Combine(modsRoot, "framework.jar.disabled");
+            string excludedPath = Path.Combine(modsRoot, "excluded.jar.disabled");
+            await File.WriteAllTextAsync(disabledPath, "disabled-mod");
+            await File.WriteAllTextAsync(excludedPath, "excluded-mod");
             await File.WriteAllTextAsync(Path.Combine(configRoot, "example.toml"), "config");
             await File.WriteAllTextAsync(Path.Combine(worldRoot, "level.dat"), "level");
             Directory.CreateDirectory(Path.Combine(worldRoot, "region"));
@@ -136,6 +140,24 @@ public static class ServerPackBuilderTests
                         SourcePath = modPath,
                         Origin = ServerModOrigins.Local,
                         Selected = true,
+                    },
+                    new ServerModEntry
+                    {
+                        Name = "Disabled Framework",
+                        RelativePath = "nested/framework.jar.disabled",
+                        SourcePath = disabledPath,
+                        Origin = ServerModOrigins.Local,
+                        Disabled = true,
+                        Selected = true,
+                    },
+                    new ServerModEntry
+                    {
+                        Name = "Excluded Disabled",
+                        RelativePath = "nested/excluded.jar.disabled",
+                        SourcePath = excludedPath,
+                        Origin = ServerModOrigins.Local,
+                        Disabled = true,
+                        Selected = false,
                     },
                 ],
                 Worlds = [new ServerWorldEntry { Name = "Demo", SourcePath = worldRoot }],
@@ -167,6 +189,11 @@ public static class ServerPackBuilderTests
             string[] entries = archive.Entries.Select(entry => entry.FullName).ToArray();
             Contains(entries, "server.jar");
             Contains(entries, "mods/nested/example.jar");
+            Contains(entries, "mods/nested/framework.jar.disabled");
+            True(archive.GetEntry("mods/nested/framework.jar") is null,
+                "Packaging a disabled mod must not enable it.");
+            True(archive.GetEntry("mods/nested/excluded.jar.disabled") is null,
+                "An unselected disabled mod must not be packaged.");
             Contains(entries, "config/example.toml");
             Contains(entries, "world/level.dat");
             Contains(entries, "world/region/r.0.0.mca");

@@ -15,6 +15,7 @@ internal static class ClientPackBuilderTests
     {
         await ModrinthUsesOnlyExactSha1MatchesAsync();
         await CurseForgeUsesOnlyExactFingerprintsAsync();
+        PlatformProjectEligibilityAndRoutesAreTypeSafe();
         await PlatformFailureFallsBackToOverridesAsync();
         await WritesLoaderMetadataForEverySupportedLoaderAsync();
         await RejectsConflictsAndHonorsOverwriteAndCancellationAsync();
@@ -77,9 +78,10 @@ internal static class ClientPackBuilderTests
             using var modrinth = new ModrinthClient(modrinthHttp);
             using var curseForge = new CurseForgeClient("test-key", new HttpClient(new NotUsedHandler()));
             using var builder = new ClientPackBuilder(modrinth, curseForge);
+            ClientContentEntry knownItem = Item(knownPath, "mods/known.jar", ClientContentKinds.Mod, selected: true);
             ClientPackSource source = Source(contentRoot, "fabric", "0.16.10",
             [
-                Item(knownPath, "mods/known.jar", ClientContentKinds.Mod, selected: true),
+                knownItem,
                 Item(unknownPath, "mods/unknown.jar", ClientContentKinds.Mod, selected: true),
                 Item(excludedPath, "options.txt", ClientContentKinds.Options, selected: false),
             ]);
@@ -114,6 +116,12 @@ internal static class ClientPackBuilderTests
             Equal("mods/known.jar", file["path"]!.GetValue<string>(), "The Modrinth path changed.");
             Equal("fabric-loader", index["dependencies"]!.AsObject().First(pair =>
                 pair.Key != "minecraft").Key, "Fabric metadata is incorrect.");
+            ClientPlatformProjectMatch? projectMatch = await builder.ResolvePlatformProjectAsync(
+                knownItem,
+                ClientPackFormats.Modrinth);
+            True(projectMatch is not null, "The exact Modrinth project lookup did not return a project.");
+            Equal("https://modrinth.com/mod/project-id", projectMatch!.ProjectUrl,
+                "The exact Modrinth project lookup returned the wrong URL.");
 
             includeSha512 = false;
             string incompleteOutput = Path.Combine(root, "missing-sha512.mrpack");
@@ -163,6 +171,8 @@ internal static class ClientPackBuilderTests
             uint knownFingerprint = ReferenceCurseForgeFingerprint(knownBytes);
             string knownSha1 = Convert.ToHexString(SHA1.HashData(knownBytes)).ToLowerInvariant();
             int projectClassId = 6;
+            bool includeDeclaredSha1 = true;
+            long declaredFileLength = knownBytes.Length;
             var requests = new List<string>();
 
             using var curseForgeHttp = new HttpClient(new DelegateHandler(async (request, cancellationToken) =>
@@ -175,6 +185,11 @@ internal static class ClientPackBuilderTests
                     True(document.RootElement.GetProperty("fingerprints").EnumerateArray()
                         .Any(value => value.GetUInt32() == knownFingerprint),
                         "The fingerprint batch omitted the known mod.");
+                    var declaredHashes = new JsonArray();
+                    if (includeDeclaredSha1)
+                    {
+                        declaredHashes.Add(new JsonObject { ["algo"] = 1, ["value"] = knownSha1 });
+                    }
                     return JsonResponse(new JsonObject
                     {
                         ["data"] = new JsonObject
@@ -189,12 +204,9 @@ internal static class ClientPackBuilderTests
                                         ["id"] = 202,
                                         ["modId"] = 101,
                                         ["fileFingerprint"] = knownFingerprint,
-                                        ["fileLength"] = knownBytes.Length,
+                                        ["fileLength"] = declaredFileLength,
                                         ["fileName"] = "known.jar",
-                                        ["hashes"] = new JsonArray
-                                        {
-                                            new JsonObject { ["algo"] = 1, ["value"] = knownSha1 },
-                                        },
+                                        ["hashes"] = declaredHashes,
                                     },
                                 },
                             },
@@ -207,7 +219,7 @@ internal static class ClientPackBuilderTests
                     {
                         ["data"] = new JsonArray
                         {
-                            new JsonObject { ["id"] = 101, ["name"] = "Known", ["classId"] = projectClassId },
+                            new JsonObject { ["id"] = 101, ["name"] = "Known", ["slug"] = "known-project", ["classId"] = projectClassId },
                         },
                     });
                 }
@@ -216,9 +228,10 @@ internal static class ClientPackBuilderTests
             using var curseForge = new CurseForgeClient("test-key", curseForgeHttp);
             using var modrinth = new ModrinthClient(new HttpClient(new NotUsedHandler()));
             using var builder = new ClientPackBuilder(modrinth, curseForge);
+            ClientContentEntry knownItem = Item(knownPath, "mods/known.jar", ClientContentKinds.Mod, selected: true);
             ClientPackSource source = Source(contentRoot, "forge", "47.2.0",
             [
-                Item(knownPath, "mods/known.jar", ClientContentKinds.Mod, selected: true),
+                knownItem,
                 Item(unknownPath, "mods/unknown.jar", ClientContentKinds.Mod, selected: true),
             ]);
             string output = Path.Combine(root, "client.zip");
@@ -243,6 +256,12 @@ internal static class ClientPackBuilderTests
             Equal(202, remote["fileID"]!.GetValue<int>(), "The CurseForge file ID is wrong.");
             Equal("forge-47.2.0", manifest["minecraft"]!["modLoaders"]![0]!["id"]!.GetValue<string>(),
                 "Forge metadata is incorrect.");
+            ClientPlatformProjectMatch? projectMatch = await builder.ResolvePlatformProjectAsync(
+                knownItem,
+                ClientPackFormats.CurseForge);
+            True(projectMatch is not null, "The exact CurseForge project lookup did not return a project.");
+            Equal("https://www.curseforge.com/minecraft/mc-mods/known-project", projectMatch!.ProjectUrl,
+                "The exact CurseForge project lookup returned the wrong URL.");
 
             projectClassId = 12;
             string wrongClassOutput = Path.Combine(root, "wrong-class.zip");
@@ -270,6 +289,25 @@ internal static class ClientPackBuilderTests
                 Item(renamedPath, "mods/renamed.jar", ClientContentKinds.Mod, selected: true),
                 Item(nestedPath, "mods/nested/known.jar", ClientContentKinds.Mod, selected: true),
             ]);
+            ClientPlatformProjectMatch? renamedProject = await builder.ResolvePlatformProjectAsync(
+                pathSource.Items[0],
+                ClientPackFormats.CurseForge);
+            True(renamedProject is not null && renamedProject.ProjectId == "101",
+                "Exact CurseForge project identification was blocked by a renamed local file.");
+
+            includeDeclaredSha1 = false;
+            True(await builder.ResolvePlatformProjectAsync(pathSource.Items[0], ClientPackFormats.CurseForge) is null,
+                "Project identification accepted a CurseForge match without a declared SHA1.");
+            includeDeclaredSha1 = true;
+            declaredFileLength = 0;
+            True(await builder.ResolvePlatformProjectAsync(pathSource.Items[0], ClientPackFormats.CurseForge) is null,
+                "Project identification accepted a CurseForge match without a verified file length.");
+            declaredFileLength = knownBytes.Length;
+            projectClassId = 12;
+            True(await builder.ResolvePlatformProjectAsync(pathSource.Items[0], ClientPackFormats.CurseForge) is null,
+                "Project identification accepted a CurseForge project with the wrong class ID.");
+            projectClassId = 6;
+
             string pathOutput = Path.Combine(root, "preserve-paths.zip");
             ClientBuildResult pathResult = await builder.BuildAsync(new ClientBuildRequest
             {
@@ -285,6 +323,51 @@ internal static class ClientPackBuilderTests
             Equal(0, (await ReadJsonAsync(pathArchive, "manifest.json"))["files"]!.AsArray().Count,
                 "A renamed or nested CurseForge file was written to the manifest.");
         });
+    }
+
+    private static void PlatformProjectEligibilityAndRoutesAreTypeSafe()
+    {
+        var resourcePack = new ClientContentEntry
+        {
+            Name = "resources.zip",
+            SourcePath = "resources.zip",
+            RelativePath = "resourcepacks/resources.zip",
+            Kind = ClientContentKinds.ResourcePack,
+        };
+        var shaderPack = new ClientContentEntry
+        {
+            Name = "shaders.zip",
+            SourcePath = "shaders.zip",
+            RelativePath = "shaderpacks/shaders.zip",
+            Kind = ClientContentKinds.ShaderPack,
+        };
+        True(ClientPackBuilder.CanResolvePlatformProject(resourcePack),
+            "A ZIP resource pack was not eligible for an exact platform lookup.");
+        True(ClientPackBuilder.CanResolvePlatformProject(shaderPack),
+            "A ZIP shader pack was not eligible for an exact platform lookup.");
+        Equal("https://modrinth.com/resourcepack/resource-id",
+            ModrinthClient.MakeProjectUrl("resource-id", projectType: ClientContentKinds.ResourcePack),
+            "The Modrinth resource-pack route is wrong.");
+        Equal("https://modrinth.com/shader/shader-id",
+            ModrinthClient.MakeProjectUrl("shader-id", projectType: ClientContentKinds.ShaderPack),
+            "The Modrinth shader route is wrong.");
+
+        resourcePack.IsDirectory = true;
+        True(!ClientPackBuilder.CanResolvePlatformProject(resourcePack),
+            "A directory resource pack would trigger a platform lookup.");
+        resourcePack.IsDirectory = false;
+        resourcePack.Disabled = true;
+        True(!ClientPackBuilder.CanResolvePlatformProject(resourcePack),
+            "A disabled resource pack would trigger a platform lookup.");
+        var other = new ClientContentEntry
+        {
+            Name = "data.zip",
+            SourcePath = "data.zip",
+            RelativePath = "data.zip",
+            Kind = ClientContentKinds.Other,
+        };
+        True(!ClientPackBuilder.CanResolvePlatformProject(other),
+            "Other client data would trigger a platform lookup.");
     }
 
     private static async Task PlatformFailureFallsBackToOverridesAsync()

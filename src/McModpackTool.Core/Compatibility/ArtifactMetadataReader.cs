@@ -859,6 +859,8 @@ public static partial class ArtifactMetadataReader
         public string Version { get; set; } = string.Empty;
         public string Loader { get; set; } = string.Empty;
         public string ServerEnvironment { get; set; } = string.Empty;
+        public bool ServerEnvironmentInferredFromForgeDependencies { get; set; }
+        public bool ForgeEnvironmentDependenciesAllClient { get; set; } = true;
         public bool HasClientEntrypoint { get; set; }
         public bool HasCommonEntrypoint { get; set; }
         public bool HasServerEntrypoint { get; set; }

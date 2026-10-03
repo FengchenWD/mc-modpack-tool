@@ -20,6 +20,8 @@ public partial class MigrationView : UserControl
     private readonly ModrinthClient _modrinth;
     private readonly LoaderVersionService _loaderVersions;
     private readonly ContentTargetResolver _targetResolver;
+    private readonly DependencyRepairService _dependencyRepair;
+    private readonly ResolvedArtifactInspector _artifactInspector = new();
     private readonly CompatibilityAnalyzer _compatibilityAnalyzer = new();
     private readonly ObservableCollection<ContentRow> _contentRows = [];
     private readonly ObservableCollection<CompatibilityRow> _compatibilityRows = [];
@@ -46,6 +48,7 @@ public partial class MigrationView : UserControl
     private string _statusKey = "migration.ready";
     private object[] _statusArguments = [];
     private readonly HashSet<string> _shownDependencyWarnings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, ArtifactCompatibilityMetadata> _targetMetadata = [];
 
     public MigrationView()
     {
@@ -58,6 +61,7 @@ public partial class MigrationView : UserControl
         _modrinth = new ModrinthClient();
         _loaderVersions = new LoaderVersionService(logWarning: message => Log("WARN", message));
         _targetResolver = new ContentTargetResolver(_curseForge, _modrinth);
+        _dependencyRepair = new DependencyRepairService(_curseForge, _modrinth);
 
         _suppressTargetEvents = true;
         MinecraftBox.Text = App.Settings.TargetMinecraft;
@@ -100,6 +104,7 @@ public partial class MigrationView : UserControl
         _curseForge.Dispose();
         _modrinth.Dispose();
         _loaderVersions.Dispose();
+        _artifactInspector.Dispose();
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -140,6 +145,7 @@ public partial class MigrationView : UserControl
         _pack = null;
         _parsedInputPath = string.Empty;
         _shownDependencyWarnings.Clear();
+        _targetMetadata.Clear();
         OverviewBox.Text = string.Empty;
         _contentRows.Clear();
         ResetAnalysisDisplay();
@@ -298,6 +304,7 @@ public partial class MigrationView : UserControl
             _pack = null;
             _parsedInputPath = string.Empty;
             _shownDependencyWarnings.Clear();
+            _targetMetadata.Clear();
             OverviewBox.Text = string.Empty;
             _contentRows.Clear();
             ResetAnalysisDisplay();
@@ -333,6 +340,7 @@ public partial class MigrationView : UserControl
         if (environmentChanged && _pack is not null)
         {
             foreach (ContentItem item in _pack.Items.Where(item => !item.Excluded && !item.Passthrough)) item.ResetTarget();
+            _targetMetadata.Clear();
             RefreshContentRows();
         }
         RefreshAutomaticOutputName(force: false);

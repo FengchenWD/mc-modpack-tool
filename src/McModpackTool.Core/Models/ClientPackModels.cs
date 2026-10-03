@@ -74,3 +74,11 @@ public sealed class ClientBuildResult
     public List<string> MissingFiles { get; } = [];
     public bool Succeeded => MissingFiles.Count == 0;
 }
+
+public sealed class ClientPlatformProjectMatch
+{
+    public string Platform { get; init; } = string.Empty;
+    public string ProjectId { get; init; } = string.Empty;
+    public string ProjectSlug { get; init; } = string.Empty;
+    public string ProjectUrl { get; init; } = string.Empty;
+}

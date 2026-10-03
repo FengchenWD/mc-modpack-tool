@@ -10,15 +10,23 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectPath = Join-Path $projectRoot "src\McModpackTool.App\McModpackTool.App.csproj"
+$installerProjectPath = Join-Path $projectRoot "src\McModpackTool.Installer\McModpackTool.Installer.csproj"
 $secretPath = Join-Path $projectRoot "src\McModpackTool.App\Services\BuildSecrets.Local.cs"
+$stagingRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot ".artifacts\beta6-1-portable"))
+$artifactsRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot ".artifacts")) + [IO.Path]::DirectorySeparatorChar
+if (-not $stagingRoot.StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "The staging directory must stay inside the project artifacts directory."
+}
 $releaseFolderName = -join @([char]0x53D1, [char]0x5E03)
 $exeName = "MC" + (-join @([char]0x6574, [char]0x5408, [char]0x5305, [char]0x5DE5, [char]0x5177)) + ".exe"
+$installerExeName = "MC" + (-join @([char]0x6574, [char]0x5408, [char]0x5305, [char]0x5DE5, [char]0x5177)) + (-join @([char]0x5B89, [char]0x88C5, [char]0x7A0B, [char]0x5E8F)) + ".exe"
 $outputPath = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     Join-Path $projectRoot $releaseFolderName
 }
 else {
     [System.IO.Path]::GetFullPath($OutputDirectory)
 }
+$portableOutputPath = Join-Path $stagingRoot $Runtime
 
 $apiKey = [Environment]::GetEnvironmentVariable("CURSEFORGE_API_KEY", "Process")
 $createdSecretModule = $false
@@ -58,24 +66,62 @@ internal static partial class BuildSecrets
         $createdSecretModule = $true
     }
 
-    dotnet publish $projectPath -c Release -r $Runtime --self-contained true -o $outputPath --nologo
+    if (-not (Test-Path -LiteralPath $installerProjectPath)) {
+        throw "The installer project was not found: $installerProjectPath"
+    }
+
+    if (Test-Path -LiteralPath $stagingRoot) {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $portableOutputPath -Force | Out-Null
+    New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
+
+    dotnet publish $projectPath -c Release -r $Runtime --self-contained true -o $portableOutputPath --nologo
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet publish failed with exit code $LASTEXITCODE."
     }
 
-    $coreSymbols = Join-Path $outputPath "McModpackTool.Core.pdb"
+    $coreSymbols = Join-Path $portableOutputPath "McModpackTool.Core.pdb"
     if (Test-Path -LiteralPath $coreSymbols) {
         Remove-Item -LiteralPath $coreSymbols -Force
     }
 
-    $exe = Join-Path $outputPath $exeName
-    if (-not (Test-Path -LiteralPath $exe)) {
-        throw "The expected executable was not created: $exe"
+    $portableExe = Join-Path $portableOutputPath $exeName
+    if (-not (Test-Path -LiteralPath $portableExe)) {
+        throw "The expected portable executable was not created: $portableExe"
     }
-    Write-Host "Release complete: $exe"
+
+    $finalPortableExe = Join-Path $outputPath $exeName
+    Copy-Item -LiteralPath $portableExe -Destination $finalPortableExe -Force
+
+    $installerPublishArgs = @(
+        $installerProjectPath,
+        "-c", "Release",
+        "-r", $Runtime,
+        "--self-contained", "true",
+        "-p:InstallerPayload=$portableExe",
+        "-o", $outputPath,
+        "--nologo"
+    )
+    & dotnet publish @installerPublishArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet publish for the installer failed with exit code $LASTEXITCODE."
+    }
+
+    $installerExe = Join-Path $outputPath $installerExeName
+    if (-not (Test-Path -LiteralPath $installerExe)) {
+        throw "The expected installer executable was not created: $installerExe"
+    }
+
+    Write-Host "Release complete:"
+    Write-Host "  Portable:  $finalPortableExe"
+    Write-Host "  Installer: $installerExe"
 }
 finally {
     if ($createdSecretModule -and (Test-Path -LiteralPath $secretPath)) {
         Remove-Item -LiteralPath $secretPath -Force
+    }
+    if (Test-Path -LiteralPath $stagingRoot) {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force
     }
 }

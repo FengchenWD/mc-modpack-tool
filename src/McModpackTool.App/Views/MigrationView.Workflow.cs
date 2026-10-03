@@ -38,6 +38,7 @@ public partial class MigrationView
         {
             if (resolveTargets)
             {
+                _targetMetadata.Clear();
                 SetWorking(true, "status.searching", indeterminate: false);
                 int total = _pack.Items.Count(item => !item.Excluded && !item.Passthrough);
                 OperationProgress.Maximum = Math.Max(1, total);
@@ -53,10 +54,37 @@ public partial class MigrationView
                     cancellationToken);
                 Log("INFO", App.Localization.Translate("log.analysis_complete", result.Found, result.Preserved, result.Missing));
                 RefreshContentRows();
+
+                SetWorking(true, "status.inspecting_artifacts", indeterminate: false);
+                OperationProgress.Maximum = Math.Max(1, _pack.Items.Count);
+                OperationProgress.Value = 0;
+                var inspectionProgress = new Progress<int>(value => OperationProgress.Value = value);
+                IReadOnlyList<ResolvedArtifactInspection> inspections = await _artifactInspector.InspectAsync(
+                    _pack.Items,
+                    inspectionProgress,
+                    cancellationToken);
+                foreach (ResolvedArtifactInspection inspection in inspections)
+                {
+                    if (inspection.Metadata is not null)
+                    {
+                        _targetMetadata[inspection.ItemIndex] = inspection.Metadata;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(inspection.Warning))
+                    {
+                        _targetMetadata[inspection.ItemIndex] = new ArtifactCompatibilityMetadata
+                        {
+                            Warnings = [inspection.Warning]
+                        };
+                    }
+                }
+                Log("INFO", $"已读取 {_targetMetadata.Count} 个目标模组文件的实际元数据。");
             }
 
             SetWorking(true, "status.analyzing", indeterminate: true);
             CompatibilityReport report = await AnalyzeStaticAsync(inputs, cancellationToken);
+            report = await RepairDependencyVersionConflictsAsync(report, inputs, cancellationToken);
+            if (promptOnErrors)
+                report = await OfferMissingDependencyRepairsAsync(report, inputs, cancellationToken);
             if (!AnalysisInputsAreCurrent(inputs))
             {
                 InvalidateAnalysis();
@@ -95,7 +123,13 @@ public partial class MigrationView
         CancellationToken cancellationToken)
     {
         if (_pack is null) throw new InvalidOperationException("Pack is not loaded.");
-        var items = CompatibilityContentItemAdapter.FromContentItems(_pack.Items, cancellationToken);
+        IReadOnlyList<CompatibilityContentItem> baseItems =
+            CompatibilityContentItemAdapter.FromContentItems(_pack.Items, cancellationToken);
+        var items = baseItems
+            .Select(item => _targetMetadata.TryGetValue(item.OriginalIndex, out ArtifactCompatibilityMetadata? metadata)
+                ? ArtifactMetadataReader.Enrich(item, metadata)
+                : item)
+            .ToArray();
         var request = new CompatibilityAnalysisRequest
         {
             Items = items,
@@ -113,6 +147,196 @@ public partial class MigrationView
 
     private Task<CompatibilityReport> AnalyzeStaticAsync(CancellationToken cancellationToken) =>
         AnalyzeStaticAsync(CaptureAnalysisInputs(), cancellationToken);
+
+    private async Task<CompatibilityReport> RepairDependencyVersionConflictsAsync(
+        CompatibilityReport report,
+        AnalysisInputs inputs,
+        CancellationToken cancellationToken)
+    {
+        if (_pack is null) return report;
+        const int maximumPasses = 4;
+        var seenStates = new HashSet<string>(StringComparer.Ordinal);
+        for (int pass = 0; pass < maximumPasses; pass++)
+        {
+            string state = string.Join(
+                "|",
+                _pack.Items.Select(item => item.TargetVersionId + ":" + item.TargetFileId));
+            if (!seenStates.Add(state)) break;
+
+            var requirementsByItem = new Dictionary<int, HashSet<string>>();
+            foreach (CompatibilityIssue issue in report.Issues.Where(issue =>
+                         issue.Code == "dependency_version_mismatch"))
+            {
+                string requirement = EvidenceString(issue, "version_requirement");
+                if (requirement.Length == 0) continue;
+                foreach (int index in EvidenceIndexes(issue, "dependency_item_indexes")
+                             .Where(index => index >= 0 && index < _pack.Items.Count))
+                {
+                    if (!requirementsByItem.TryGetValue(index, out HashSet<string>? requirements))
+                    {
+                        requirements = new HashSet<string>(StringComparer.Ordinal);
+                        requirementsByItem[index] = requirements;
+                    }
+                    requirements.Add(requirement);
+                }
+            }
+            if (requirementsByItem.Count == 0) break;
+
+            bool changed = false;
+            foreach ((int index, HashSet<string> requirements) in requirementsByItem)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ContentItem item = _pack.Items[index];
+                string previous = item.TargetVersionNumber;
+                try
+                {
+                    if (await _targetResolver.TrySelectCompatibleModrinthVersionAsync(
+                            item,
+                            inputs.TargetMinecraft,
+                            inputs.TargetLoader,
+                            requirements,
+                            cancellationToken))
+                    {
+                        changed = true;
+                        Log(
+                            "INFO",
+                            $"已为 {DisplayName(item)} 自动改选满足依赖约束的版本：{previous} -> {item.TargetVersionNumber}");
+                    }
+                }
+                catch (PlatformApiException exception)
+                {
+                    Log("WARN", $"无法为 {DisplayName(item)} 求解依赖版本：{exception.Message}");
+                }
+            }
+            if (!changed) break;
+
+            RefreshContentRows();
+            SetWorking(true, "status.inspecting_artifacts", indeterminate: false);
+            OperationProgress.Maximum = Math.Max(1, _pack.Items.Count);
+            OperationProgress.Value = 0;
+            var progress = new Progress<int>(value => OperationProgress.Value = value);
+            IReadOnlyList<ResolvedArtifactInspection> inspections = await _artifactInspector.InspectAsync(
+                _pack.Items,
+                progress,
+                cancellationToken);
+            _targetMetadata.Clear();
+            foreach (ResolvedArtifactInspection inspection in inspections)
+            {
+                if (inspection.Metadata is not null)
+                    _targetMetadata[inspection.ItemIndex] = inspection.Metadata;
+                else if (!string.IsNullOrWhiteSpace(inspection.Warning))
+                    _targetMetadata[inspection.ItemIndex] = new ArtifactCompatibilityMetadata
+                    {
+                        Warnings = [inspection.Warning]
+                    };
+            }
+            SetWorking(true, "status.analyzing", indeterminate: true);
+            report = await AnalyzeStaticAsync(inputs, cancellationToken);
+        }
+        return report;
+    }
+
+    private async Task<CompatibilityReport> OfferMissingDependencyRepairsAsync(
+        CompatibilityReport report,
+        AnalysisInputs inputs,
+        CancellationToken cancellationToken)
+    {
+        if (_pack is null) return report;
+        const int maximumPasses = 8;
+        for (int pass = 0; pass < maximumPasses; pass++)
+        {
+            var issues = report.Issues
+                .Where(issue => issue.Code == "missing_required_dependency")
+                .Select(issue => new
+                {
+                    Issue = issue,
+                    Source = EvidenceString(issue, "source").ToLowerInvariant(),
+                    ReferenceType = EvidenceString(issue, "dependency_reference_type").ToLowerInvariant(),
+                    Reference = EvidenceString(issue, "dependency_exact")
+                })
+                .Where(candidate => candidate.Reference.Length > 0)
+                .GroupBy(
+                    candidate => string.Join('\u001f', candidate.Source, candidate.ReferenceType, candidate.Reference.ToLowerInvariant()),
+                    StringComparer.Ordinal)
+                .Select(group => group.First())
+                .Where(candidate => !_shownDependencyWarnings.Contains(
+                    string.Join('\u001f', candidate.Source, candidate.ReferenceType, candidate.Reference.ToLowerInvariant())))
+                .ToArray();
+            if (issues.Length == 0) break;
+
+            bool addedAny = false;
+            foreach (var missing in issues)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string key = string.Join('\u001f', missing.Source, missing.ReferenceType, missing.Reference.ToLowerInvariant());
+                _shownDependencyWarnings.Add(key);
+                DependencyRepairCandidate? candidate;
+                try
+                {
+                    candidate = await _dependencyRepair.ResolveAsync(
+                        missing.Source,
+                        missing.ReferenceType,
+                        missing.Reference,
+                        inputs.TargetMinecraft,
+                        inputs.TargetLoader,
+                        cancellationToken);
+                }
+                catch (PlatformApiException exception)
+                {
+                    Log("WARN", $"无法解析必需依赖 {missing.Reference}: {exception.Message}");
+                    continue;
+                }
+                if (candidate is null) continue;
+
+                string owner = string.IsNullOrWhiteSpace(missing.Issue.Item) ? "-" : missing.Issue.Item!;
+                string platform = candidate.Source == "modrinth" ? "Modrinth" : "CurseForge";
+                MessageBoxResult answer = MessageBox.Show(
+                    App.Localization.Translate(
+                        "deps.confirm_add",
+                        candidate.Item.Name,
+                        platform,
+                        owner),
+                    App.Localization["deps.title"],
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (answer != MessageBoxResult.Yes) continue;
+
+                bool alreadyPresent = _pack.Items.Any(item =>
+                    !item.Excluded
+                    && string.Equals(item.Source, candidate.Item.Source, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(item.ProjectId, candidate.Item.ProjectId, StringComparison.OrdinalIgnoreCase));
+                if (alreadyPresent) continue;
+                _pack.Items.Add(candidate.Item);
+                addedAny = true;
+                Log("INFO", $"已由用户确认补充必需依赖：{candidate.Item.Name}");
+            }
+
+            if (!addedAny) break;
+            RefreshContentRows();
+            SetWorking(true, "status.inspecting_artifacts", indeterminate: false);
+            OperationProgress.Maximum = Math.Max(1, _pack.Items.Count);
+            OperationProgress.Value = 0;
+            var progress = new Progress<int>(value => OperationProgress.Value = value);
+            IReadOnlyList<ResolvedArtifactInspection> inspections = await _artifactInspector.InspectAsync(
+                _pack.Items,
+                progress,
+                cancellationToken);
+            _targetMetadata.Clear();
+            foreach (ResolvedArtifactInspection inspection in inspections)
+            {
+                if (inspection.Metadata is not null)
+                    _targetMetadata[inspection.ItemIndex] = inspection.Metadata;
+                else if (!string.IsNullOrWhiteSpace(inspection.Warning))
+                    _targetMetadata[inspection.ItemIndex] = new ArtifactCompatibilityMetadata
+                    {
+                        Warnings = [inspection.Warning]
+                    };
+            }
+            SetWorking(true, "status.analyzing", indeterminate: true);
+            report = await AnalyzeStaticAsync(inputs, cancellationToken);
+        }
+        return report;
+    }
 
     private void ApplyCompatibilityReport(CompatibilityReport report, string? snapshot = null)
     {
@@ -486,6 +710,20 @@ public partial class MigrationView
             MessageBox.Show(App.Localization["dialog.analysis_first"], App.Localization["common.error"], MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
+        CompatibilityReport finalReport = await AnalyzeStaticAsync(inputs, CancellationToken.None);
+        if (finalReport.HasErrors)
+        {
+            ApplyCompatibilityReport(finalReport, inputs.Snapshot);
+            int count = finalReport.Counts.GetValueOrDefault(CompatibilitySeverity.Error);
+            MessageBox.Show(
+                App.Localization.Translate("resolution.blocked", count),
+                App.Localization["common.warning"],
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            ResultTabs.SelectedIndex = 0;
+            return;
+        }
+        _report = finalReport;
         string? outputPath = GetOutputPath();
         if (outputPath is null) return;
         if (PathsEqual(outputPath, _parsedInputPath))
@@ -534,6 +772,22 @@ public partial class MigrationView
                 return;
             }
 
+            string validationError = await ValidateBuiltPackAsync(
+                outputPath,
+                inputs,
+                _operationCts.Token);
+            if (validationError.Length > 0)
+            {
+                SetStatus("build.incomplete_status");
+                Log("ERROR", validationError);
+                MessageBox.Show(
+                    App.Localization.Translate("build.final_validation_failed", validationError),
+                    App.Localization["common.error"],
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return;
+            }
+
             var message = new StringBuilder(App.Localization["build.notice"])
                 .AppendLine().AppendLine()
                 .Append(App.Localization.Translate("build.location", outputPath));
@@ -561,6 +815,29 @@ public partial class MigrationView
             _operationCts?.Dispose();
             _operationCts = null;
             SetWorking(false);
+        }
+    }
+
+    private async Task<string> ValidateBuiltPackAsync(
+        string outputPath,
+        AnalysisInputs inputs,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            ModpackInfo parsed = await PackParser.ParseAsync(outputPath, cancellationToken: cancellationToken);
+            if (!parsed.MinecraftVersion.Equals(inputs.TargetMinecraft, StringComparison.Ordinal))
+                return $"导出清单中的 Minecraft 版本为 {parsed.MinecraftVersion}，预期为 {inputs.TargetMinecraft}。";
+            if (!SearchMatcher.NormalizeLoaderName(parsed.LoaderType)
+                    .Equals(SearchMatcher.NormalizeLoaderName(inputs.TargetLoader), StringComparison.Ordinal))
+                return $"导出清单中的模组加载器为 {parsed.LoaderType}，预期为 {inputs.TargetLoader}。";
+            if (!parsed.FormatType.Equals(_pack?.FormatType, StringComparison.OrdinalIgnoreCase))
+                return $"导出格式为 {parsed.FormatType}，预期为 {_pack?.FormatType}。";
+            return string.Empty;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException)
+        {
+            return "无法重新读取导出的整合包清单：" + exception.Message;
         }
     }
 

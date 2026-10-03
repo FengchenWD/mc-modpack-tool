@@ -115,7 +115,17 @@
                                                                   Visibility="{Binding ItemsVisibility}">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
-                                                                <Grid MinHeight="30" Margin="0,1">
+                                                                <Grid MinHeight="30" Margin="0,1"
+                                                                      ContextMenuOpening="ContentItem_ContextMenuOpening">
+                                                                    <Grid.ContextMenu>
+                                                                        <ContextMenu Style="{StaticResource CompactContextMenuStyle}"
+                                                                                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                                            <MenuItem Style="{StaticResource CompactContextMenuItemStyle}"
+                                                                                      Header="{Binding CurseForgeActionText}" Tag="curseforge" Click="OpenClientPlatform_Click" />
+                                                                            <MenuItem Style="{StaticResource CompactContextMenuItemStyle}"
+                                                                                      Header="{Binding ModrinthActionText}" Tag="modrinth" Click="OpenClientPlatform_Click" />
+                                                                        </ContextMenu>
+                                                                    </Grid.ContextMenu>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="28" />
                                                                         <ColumnDefinition Width="1.2*" />

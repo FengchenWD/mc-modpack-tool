@@ -13,6 +13,7 @@ public partial class ClientPackView : UserControl
 {
     private readonly ObservableCollection<ClientContentGroup> _groups = [];
     private readonly Dictionary<ClientContentEntry, bool> _defaultSelections = [];
+    private readonly Dictionary<(ClientContentEntry Entry, string Platform), ClientPlatformProjectMatch?> _platformMatchCache = [];
     private readonly CurseForgeClient _curseForge;
     private readonly ModrinthClient _modrinth;
     private readonly ClientPackBuilder _builder;
@@ -84,6 +85,9 @@ public partial class ClientPackView : UserControl
         public string RelativePath => Entry.RelativePath;
         public string SizeText => FormatSize(Entry.TotalBytes);
         public bool CanSelect => true;
+        public bool CanOpenProject => ClientPackBuilder.CanResolvePlatformProject(Entry);
+        public string CurseForgeActionText => App.Localization["action.open_curseforge"];
+        public string ModrinthActionText => App.Localization["action.open_modrinth"];
         public bool Selected
         {
             get => _selected;
@@ -98,7 +102,14 @@ public partial class ClientPackView : UserControl
             }
         }
 
+        public void RefreshText()
+        {
+            OnPropertyChanged(nameof(CurseForgeActionText));
+            OnPropertyChanged(nameof(ModrinthActionText));
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
     private sealed class ClientContentGroup : INotifyPropertyChanged
@@ -170,6 +181,7 @@ public partial class ClientPackView : UserControl
         {
             DisplayName = App.Localization[$"client.group.{Kind}"];
             Summary = App.Localization.Translate("client.group_summary", Items.Count, FormatSize(Items.Sum(item => item.Entry.TotalBytes)));
+            foreach (ClientContentRow item in Items) item.RefreshText();
             OnPropertyChanged(nameof(DisplayName));
             OnPropertyChanged(nameof(Summary));
             OnPropertyChanged(nameof(ToggleHint));
@@ -190,6 +202,14 @@ public partial class ClientPackView : UserControl
     {
         if (sender is Button { DataContext: ClientContentGroup group })
             group.IsExpanded = !group.IsExpanded;
+    }
+
+    private void ContentItem_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ClientContentRow { CanOpenProject: true } })
+        {
+            e.Handled = true;
+        }
     }
 
     private static string FormatSize(long bytes)

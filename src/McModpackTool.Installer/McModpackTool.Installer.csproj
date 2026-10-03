@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>McModpackTool.Installer</RootNamespace>
+    <AssemblyName>MC整合包工具安装程序</AssemblyName>
+    <ApplicationIcon Condition="Exists('../McModpackTool.App/Assets/mc_modpack_tool.ico')">../McModpackTool.App/Assets/mc_modpack_tool.ico</ApplicationIcon>
+    <Version>1.0.0-beta.6.1</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0-beta.6.1</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Product>MC整合包工具安装程序</Product>
+    <Authors>风尘WD</Authors>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="..\McModpackTool.App\Assets\mc_modpack_tool.png"
+              Link="Assets\mc_modpack_tool.png"
+              Condition="Exists('..\McModpackTool.App\Assets\mc_modpack_tool.png')" />
+    <Resource Include="..\McModpackTool.App\Assets\mc_modpack_tool.ico"
+              Link="Assets\mc_modpack_tool.ico"
+              Condition="Exists('..\McModpackTool.App\Assets\mc_modpack_tool.ico')" />
+    <EmbeddedResource Include="$(InstallerPayload)"
+                      LogicalName="McModpackTool.Installer.Payload.exe"
+                      Condition="'$(InstallerPayload)' != '' and Exists('$(InstallerPayload)')" />
+  </ItemGroup>
+</Project>

@@ -257,6 +257,15 @@ public static class GameDirectoryScanner
             }
         }
 
+        foreach (var metadata in chain)
+        {
+            var argumentVersion = FindArgumentValue(metadata.GameArguments, "--fml.mcVersion");
+            if (argumentVersion.Length > 0)
+            {
+                return argumentVersion;
+            }
+        }
+
         var last = chain[^1];
         if (last.InheritsFrom.Length > 0)
         {
@@ -291,6 +300,17 @@ public static class GameDirectoryScanner
         IReadOnlyList<VersionMetadata> chain,
         string minecraftVersion)
     {
+        foreach (var metadata in chain)
+        {
+            var neoForgeVersion = FindArgumentValue(
+                metadata.GameArguments,
+                "--fml.neoForgeVersion");
+            if (neoForgeVersion.Length > 0)
+            {
+                return ("neoforge", neoForgeVersion);
+            }
+        }
+
         foreach (var metadata in chain)
         {
             foreach (var library in metadata.Libraries)
@@ -330,6 +350,15 @@ public static class GameDirectoryScanner
 
         foreach (var metadata in chain)
         {
+            var forgeVersion = FindArgumentValue(metadata.GameArguments, "--fml.forgeVersion");
+            if (forgeVersion.Length > 0)
+            {
+                return ("forge", RemoveMinecraftPrefix(forgeVersion, minecraftVersion));
+            }
+        }
+
+        foreach (var metadata in chain)
+        {
             var fallback = FindLoaderInVersionId(metadata.Id, minecraftVersion);
             if (fallback.LoaderType.Length > 0)
             {
@@ -337,6 +366,29 @@ public static class GameDirectoryScanner
             }
         }
         return (string.Empty, string.Empty);
+    }
+
+    private static string FindArgumentValue(
+        IReadOnlyList<string> arguments,
+        string option)
+    {
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var argument = arguments[index];
+            if (argument.Equals(option, StringComparison.OrdinalIgnoreCase))
+            {
+                return index + 1 < arguments.Count
+                    ? arguments[index + 1].Trim()
+                    : string.Empty;
+            }
+
+            var assignmentPrefix = option + "=";
+            if (argument.StartsWith(assignmentPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return argument[assignmentPrefix.Length..].Trim();
+            }
+        }
+        return string.Empty;
     }
 
     private static (string LoaderType, string LoaderVersion) FindLoaderInVersionId(
@@ -464,17 +516,114 @@ public static class GameDirectoryScanner
                 }
             }
 
+            string clientVersion = GetString(root, "clientVersion");
+            CollectLauncherComponents(root, "patches", libraries, ref clientVersion);
+            CollectLauncherComponents(root, "components", libraries, ref clientVersion);
+            string directNeoForgeVersion = GetString(root, "neoForgeVersion");
+            if (directNeoForgeVersion.Length == 0)
+                directNeoForgeVersion = GetString(root, "neoforgeVersion");
+            if (directNeoForgeVersion.Length > 0)
+                libraries.Add("net.neoforged:neoforge:" + directNeoForgeVersion);
+
+            var gameArguments = new List<string>();
+            if (root.TryGetProperty("arguments", out var arguments) &&
+                arguments.ValueKind == JsonValueKind.Object &&
+                arguments.TryGetProperty("game", out var game))
+            {
+                CollectArgumentValues(game, gameArguments);
+            }
+            var legacyArguments = GetString(root, "minecraftArguments");
+            if (legacyArguments.Length > 0)
+            {
+                gameArguments.AddRange(
+                    legacyArguments.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            }
+
             return new VersionMetadata(
                 id,
                 inheritsFrom,
-                GetString(root, "clientVersion"),
+                clientVersion,
                 GetString(root, "jar"),
                 libraries,
+                gameArguments,
                 Path.GetFullPath(path));
         }
         catch (JsonException)
         {
             return null;
+        }
+    }
+
+    private static void CollectLauncherComponents(
+        JsonElement root,
+        string propertyName,
+        ICollection<string> libraries,
+        ref string clientVersion)
+    {
+        if (!root.TryGetProperty(propertyName, out JsonElement components)
+            || components.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+        foreach (JsonElement component in components.EnumerateArray())
+        {
+            if (component.ValueKind != JsonValueKind.Object) continue;
+            string id = GetString(component, "id");
+            if (id.Length == 0) id = GetString(component, "uid");
+            string version = GetString(component, "version");
+            if (id.Length == 0 || version.Length == 0) continue;
+            string normalized = id.ToLowerInvariant();
+            if (normalized is "net.minecraft" or "minecraft")
+            {
+                if (clientVersion.Length == 0) clientVersion = version;
+            }
+            else if (normalized.Contains("neoforged", StringComparison.Ordinal)
+                     || normalized.EndsWith(".neoforge", StringComparison.Ordinal))
+            {
+                libraries.Add("net.neoforged:neoforge:" + version);
+            }
+            else if (normalized.Contains("minecraftforge", StringComparison.Ordinal)
+                     || normalized.EndsWith(".forge", StringComparison.Ordinal))
+            {
+                libraries.Add("net.minecraftforge:forge:" + version);
+            }
+            else if (normalized.Contains("fabric-loader", StringComparison.Ordinal)
+                     || normalized.EndsWith(".fabricloader", StringComparison.Ordinal))
+            {
+                libraries.Add("net.fabricmc:fabric-loader:" + version);
+            }
+            else if (normalized.Contains("quilt-loader", StringComparison.Ordinal))
+            {
+                libraries.Add("org.quiltmc:quilt-loader:" + version);
+            }
+        }
+    }
+
+    private static void CollectArgumentValues(JsonElement value, ICollection<string> result)
+    {
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var text = value.GetString()?.Trim() ?? string.Empty;
+            if (text.Length > 0)
+            {
+                result.Add(text);
+            }
+            return;
+        }
+
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                CollectArgumentValues(item, result);
+            }
+            return;
+        }
+
+        if (value.ValueKind == JsonValueKind.Object &&
+            value.TryGetProperty("value", out var nestedValue))
+        {
+            CollectArgumentValues(nestedValue, result);
         }
     }
 
@@ -773,6 +922,7 @@ public static class GameDirectoryScanner
         string ClientVersion,
         string Jar,
         IReadOnlyList<string> Libraries,
+        IReadOnlyList<string> GameArguments,
         string Path);
 
     private sealed record LocalFile(string FullPath, string RelativePath);

@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Win32;
 using McModpackTool.App.Services;
 using McModpackTool.Core.Compatibility;
@@ -22,7 +24,9 @@ public partial class ServerView : UserControl
     private readonly ServerArchiveSourceReader _archiveReader;
     private readonly ServerCoreService _coreService;
     private readonly ServerPackBuilder _builder;
+    private readonly ClientPackBuilder _platformProjectResolver;
     private readonly JavaRuntimeService _javaRuntimeService = new();
+    private readonly Dictionary<(ServerModEntry Entry, string Platform), ClientPlatformProjectMatch?> _platformMatchCache = [];
     private readonly ModeState _directoryState = new();
     private readonly ModeState _archiveState = new();
     private ModeState _activeState;
@@ -67,10 +71,12 @@ public partial class ServerView : UserControl
         _modrinth = new ModrinthClient();
         _supportResolver = new ServerModSupportResolver(
             _modrinth,
-            message => Dispatcher.Invoke(() => Log("WARN", message)));
+            logWarning: message => Dispatcher.Invoke(() => Log("WARN", message)),
+            curseForge: _curseForge);
         _archiveReader = new ServerArchiveSourceReader(_curseForge);
         _coreService = new ServerCoreService(logWarning: message => Dispatcher.Invoke(() => Log("WARN", message)));
         _builder = new ServerPackBuilder(_coreService);
+        _platformProjectResolver = new ClientPackBuilder(_modrinth, _curseForge);
 
         App.Localization.LanguageChanged += Localization_LanguageChanged;
         OutputNameBox.TextChanged += OutputNameBox_TextChanged;
@@ -96,6 +102,7 @@ public partial class ServerView : UserControl
         }
         CleanupAllSources();
         _builder.Dispose();
+        _platformProjectResolver.Dispose();
         _coreService.Dispose();
         _curseForge.Dispose();
         _modrinth.Dispose();
@@ -145,6 +152,203 @@ public partial class ServerView : UserControl
         ChooseJavaButton.Content = App.Localization["server.browse"];
         RefreshJavaHint();
     }
+
+    private void ModsGrid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ItemsControl.ContainerFromElement(ModsGrid, e.OriginalSource as DependencyObject) is not DataGridRow row)
+        {
+            return;
+        }
+
+        row.IsSelected = true;
+        ModsGrid.CurrentItem = row.Item;
+        row.Focus();
+    }
+
+    private async void OpenCurseForge_Click(object sender, RoutedEventArgs e)
+        => await OpenServerProjectAsync(ClientPackFormats.CurseForge);
+
+    private async void OpenModrinth_Click(object sender, RoutedEventArgs e)
+        => await OpenServerProjectAsync(ClientPackFormats.Modrinth);
+
+    private async Task OpenServerProjectAsync(string platform)
+    {
+        if (_working || ModsGrid.SelectedItem is not ServerModRow row)
+        {
+            return;
+        }
+
+        string projectUrl = ResolveServerProjectUrl(row.Entry.ContentItem, platform);
+        if (projectUrl.Length > 0)
+        {
+            TryOpenProjectUrl(projectUrl, platform);
+            return;
+        }
+
+        var cacheKey = (row.Entry, platform);
+        if (!_platformMatchCache.TryGetValue(cacheKey, out ClientPlatformProjectMatch? match))
+        {
+            ClientContentEntry? lookupEntry = CreatePlatformLookupEntry(row.Entry);
+            if (lookupEntry is null)
+            {
+                ShowProjectNotFound(platform, row.Name);
+                return;
+            }
+
+            string previousStatusKey = _statusKey;
+            CancellationToken cancellationToken = BeginOperation();
+            SetWorking(true, "client.platform_lookup", indeterminate: true);
+            try
+            {
+                match = await _platformProjectResolver.ResolvePlatformProjectAsync(
+                    lookupEntry,
+                    platform,
+                    cancellationToken);
+                _platformMatchCache[cacheKey] = match;
+                Log("INFO", match is null
+                    ? $"Exact {platform} hash match not found: {lookupEntry.RelativePath}"
+                    : $"Exact {platform} project match: {lookupEntry.RelativePath} -> {match.ProjectUrl}");
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus("server.cancelled");
+                return;
+            }
+            catch (Exception exception)
+            {
+                Log("ERROR", exception.ToString());
+                MessageBox.Show(
+                    App.Localization.Translate(
+                        "client.dialog.platform_lookup_failed",
+                        PlatformName(platform),
+                        row.Name),
+                    App.Localization["common.error"],
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return;
+            }
+            finally
+            {
+                SetWorking(false);
+                EndOperation();
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    SetStatus(previousStatusKey);
+                }
+            }
+        }
+
+        if (match is null)
+        {
+            ShowProjectNotFound(platform, row.Name);
+            return;
+        }
+        TryOpenProjectUrl(match.ProjectUrl, platform);
+    }
+
+    private static ClientContentEntry? CreatePlatformLookupEntry(ServerModEntry entry)
+    {
+        if (entry.Disabled || string.IsNullOrWhiteSpace(entry.SourcePath) || !File.Exists(entry.SourcePath))
+        {
+            return null;
+        }
+
+        string relativePath = entry.RelativePath.Replace('\\', '/').TrimStart('/');
+        if (relativePath.StartsWith("mods/", StringComparison.OrdinalIgnoreCase))
+        {
+            relativePath = relativePath["mods/".Length..];
+        }
+        if (relativePath.Length == 0)
+        {
+            relativePath = Path.GetFileName(entry.SourcePath);
+        }
+        if (!Path.GetExtension(relativePath).Equals(".jar", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return new ClientContentEntry
+        {
+            Name = entry.Name,
+            SourcePath = Path.GetFullPath(entry.SourcePath),
+            RelativePath = $"mods/{relativePath}",
+            Kind = ClientContentKinds.Mod,
+            Selected = true,
+        };
+    }
+
+    private static string ResolveServerProjectUrl(ContentItem? item, string platform)
+    {
+        if (platform.Equals("curseforge", StringComparison.OrdinalIgnoreCase))
+        {
+            string projectId = ProjectIdForPlatform(item, "curseforge");
+            long.TryParse(projectId, NumberStyles.None, CultureInfo.InvariantCulture, out long numericProjectId);
+            if (numericProjectId <= 0 && string.IsNullOrWhiteSpace(item?.CurseForgeSlug))
+            {
+                return string.Empty;
+            }
+            return CurseForgeClient.MakeProjectUrl(item?.CurseForgeSlug, numericProjectId, "mod");
+        }
+
+        if (platform.Equals("modrinth", StringComparison.OrdinalIgnoreCase))
+        {
+            string projectId = ProjectIdForPlatform(item, "modrinth");
+            return projectId.Length > 0 || !string.IsNullOrWhiteSpace(item?.ModrinthSlug)
+                ? ModrinthClient.MakeProjectUrl(projectId, item?.ModrinthSlug)
+                : string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static string ProjectIdForPlatform(ContentItem? item, string platform)
+    {
+        if (item is null)
+        {
+            return string.Empty;
+        }
+        if (item.Source.Equals(platform, StringComparison.OrdinalIgnoreCase))
+        {
+            return item.ProjectId;
+        }
+        return item.OriginalSource.Equals(platform, StringComparison.OrdinalIgnoreCase)
+            ? item.OriginalProjectId
+            : string.Empty;
+    }
+
+    private void ShowProjectNotFound(string platform, string name)
+    {
+        MessageBox.Show(
+            App.Localization.Translate(
+                "client.dialog.platform_not_found",
+                PlatformName(platform),
+                name),
+            App.Localization["common.warning"],
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
+    private void TryOpenProjectUrl(string url, string platform)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            Log("ERROR", exception.ToString());
+            MessageBox.Show(
+                App.Localization.Translate("client.dialog.open_project_failed", PlatformName(platform)),
+                App.Localization["common.error"],
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private static string PlatformName(string platform) =>
+        platform.Equals(ClientPackFormats.CurseForge, StringComparison.OrdinalIgnoreCase)
+            ? "CurseForge"
+            : "Modrinth";
 
     private void RefreshJavaHint()
     {
@@ -248,8 +452,16 @@ public partial class ServerView : UserControl
         {
             return;
         }
+        RefreshRequiredModSelection();
         RefreshJavaRecommendation();
         InvalidatePreparation();
+    }
+
+    private void RefreshRequiredModSelection()
+    {
+        if (_source is null) return;
+        _supportResolver.RefreshSelectedDependencies(_source);
+        foreach (ServerModRow row in _modRows) row.RefreshFromEntry();
     }
 
     private void JavaCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -566,6 +778,7 @@ public partial class ServerView : UserControl
     private void ApplySource(ServerPackSource source, string inputPath)
     {
         CleanupSource();
+        _platformMatchCache.Clear();
         _source = source;
         _javaRuntimes.Clear();
         _selectedJavaPath = string.Empty;
@@ -1096,8 +1309,14 @@ public partial class ServerView : UserControl
 
         public void RefreshText()
         {
-            Support = App.Localization[$"server.support.{Entry.ServerSupport}"];
+            Support = App.Localization[Entry.Disabled ? "server.support.disabled" : $"server.support.{Entry.ServerSupport}"];
             Source = App.Localization[$"server.origin.{Entry.Origin}"];
+        }
+
+        public void RefreshFromEntry()
+        {
+            Set(ref _selected, Entry.Selected, nameof(Selected));
+            RefreshText();
         }
 
         private bool Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

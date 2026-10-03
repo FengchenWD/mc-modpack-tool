@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using McModpackTool.Core.Compatibility;
 using McModpackTool.Core.Models;
@@ -20,13 +22,14 @@ public sealed class ServerModSupportResolver
         // Renderers, shaders, and purely visual clients.
         "optifine", "iris", "irisshaders", "oculus", "sodium", "embeddium", "rubidium",
         "nvidium", "continuity", "entityculling", "moreculling", "dynamiclights", "shader",
-        "shaderloader", "citresewn", "notenoughanimations", "skinlayers3d",
+        "shaderloader", "citresewn", "notenoughanimations", "skinlayers3d", "wizoom",
+        "cadeditor", "dynamicfps", "splattermod", "watermedia",
         // Inventory, HUD, tooltip, and client-control helpers.
         "jei", "justenoughitems", "rei", "roughlyenoughitems", "emi", "inventorytweaks",
         "inventoryprofilesnext", "mousetweaks", "appleskin", "hwyla", "waila",
         "wailaharvestability", "wthit", "jade", "neat", "overpoweredarmorbar", "betterf3",
         "modmenu", "shulkerboxtooltip", "tooltipfix", "controlling", "lightoverlay", "minihud",
-        "litematica", "tweakeroo", "itemscroller", "malilib", "replaymod", "okzoomer",
+        "litematica", "tweakeroo", "itemscroller", "replaymod", "okzoomer",
         "zoomify", "blur", "customskinloader", "mumblelink", "lanserverproperties",
         "betteradvancements", "notenoughcrashes", "hud",
         "tooltip", "keybind", "keybinding", "crosshair", "overlay",
@@ -34,9 +37,10 @@ public sealed class ServerModSupportResolver
         "mcwifipnp", "fancymenu", "konkrete", "melody", "presencefootsteps",
         "soundphysicsremastered", "mcef", "auudio", "ambientsounds", "drippyloadingscreen",
         "probejs", "netmusic", "jecharacters", "ctm", "connectedtexturesmod", "inventoryprofilesnext",
-        "libipn", "particlerain", "sodiumdynamiclights", "entitymodelfeatures",
+        "particlerain", "sodiumdynamiclights", "entitymodelfeatures",
         "entitytexturefeatures", "tpshooting", "embeddiumextra", "immediatelyfast",
-        "shouldersurfing", "i18nupdatemod", "myserveriscompatible",
+        "shouldersurfing", "i18nupdatemod", "myserveriscompatible", "handheldmoon",
+        "conditionalvideos", "epicdeathscreen", "watermediabinaries",
         // Common Chinese labels used by launcher-exported packs.
         "体素地图", "小地图", "世界地图", "光影", "鼠标手势", "苹果皮", "血条显示",
         "挖掘显示", "物品管理器", "r键整理", "万用皮肤补丁", "自定义局域网联机",
@@ -58,7 +62,6 @@ public sealed class ServerModSupportResolver
         "nrikgvxm", // Particle Rain
         "PxQSWIcD", // Sodium Dynamic Lights
         "I7k4B65h", // JECharacters
-        "onSQdWhM", // libIPN
         "FCr31KmZ", // Auudio
         "4I1XuqiY", // Entity Model Features
         "BVzZfTc1", // Entity Texture Features
@@ -73,6 +76,36 @@ public sealed class ServerModSupportResolver
         "PWERr14M", // I18n Update Mod
         "fM515JnW", // AmbientSounds
         "13qq15Cg", // My Server Is Compatible
+        "QYxLd8Ry", // ConditionalVideos
+        "NBq5BYpp", // Epic Death Screen
+        "4997XcoK", // WaterMedia Binaries
+        "MJW1h2CF", // CAD Editor
+        "LQ3K71Q1", // Dynamic FPS
+        "M93DtNU5", // Immersive Blood Splatters
+        "G922NeHS", // WaterMedia
+    };
+
+    private static readonly string[] KnownClientOnlyNormalizedFragments =
+    [
+        "wizoom",
+    ];
+
+    private static readonly HashSet<string> KnownOptionalClientIdentifiers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "jei", "justenoughitems", "jade", "appleskin", "clothconfig", "clothconfigapi",
+        "yacl", "yetanotherconfiglib", "yetanotherconfiglibv3",
+        // A library's client entrypoint alone does not make it unsafe on a server.
+        // Explicit environment declarations still take precedence over this fallback.
+        "libipn", "malilib",
+    };
+
+    private static readonly HashSet<string> KnownOptionalClientProjectIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "u6dRKJwZ", // Just Enough Items
+        "nvQzSEkH", // Jade
+        "EsAfCjCV", // AppleSkin
+        "9s6osm5g", // Cloth Config API
+        "1eAoo2KR", // YetAnotherConfigLib
     };
 
     private static readonly HashSet<string> KnownServerFeatureModIds = new(StringComparer.OrdinalIgnoreCase)
@@ -86,18 +119,24 @@ public sealed class ServerModSupportResolver
     {
         "fabric-api",
         "P7dR8mSH",
+        "fabric-language-kotlin",
+        "Ha28R6CL",
     };
 
     private readonly ModrinthClient _modrinth;
+    private readonly CurseForgeClient? _curseForge;
     private readonly HttpClient _artifactHttpClient;
     private readonly Action<string>? _logWarning;
+    private readonly ConditionalWeakTable<ServerPackSource, Dictionary<ServerModEntry, ModEvidence>> _resolvedEvidence = new();
 
     public ServerModSupportResolver(
         ModrinthClient modrinth,
         Action<string>? logWarning = null,
-        HttpClient? artifactHttpClient = null)
+        HttpClient? artifactHttpClient = null,
+        CurseForgeClient? curseForge = null)
     {
         _modrinth = modrinth ?? throw new ArgumentNullException(nameof(modrinth));
+        _curseForge = curseForge;
         _logWarning = logWarning;
         _artifactHttpClient = artifactHttpClient ?? SharedArtifactHttpClient;
     }
@@ -164,6 +203,8 @@ public sealed class ServerModSupportResolver
             evidence[entry] = new ModEvidence(metadata);
         }
 
+        await ResolveCurseForgeEvidenceAsync(evidence, cancellationToken).ConfigureAwait(false);
+
         if (hashOwners.Count > 0)
         {
             try
@@ -183,9 +224,9 @@ public sealed class ServerModSupportResolver
                         evidence[owner].Version = version;
                         if (owner.ContentItem is not null && version.Dependencies is not null)
                         {
-                            owner.ContentItem.TargetDependencies = version.Dependencies
-                                .Select(DependencyReference.FromModrinth)
-                                .ToList();
+                            MergeDependencies(
+                                owner.ContentItem,
+                                version.Dependencies.Select(DependencyReference.FromModrinth));
                             owner.ContentItem.DependencyMetadataAvailable = true;
                         }
                     }
@@ -249,6 +290,205 @@ public sealed class ServerModSupportResolver
         }
 
         PromoteRequiredDependencies(source.Mods, evidence);
+        _resolvedEvidence.Remove(source);
+        _resolvedEvidence.Add(source, evidence);
+    }
+
+    /// <summary>Rechecks the user's current selection without repeating network requests or resetting choices.</summary>
+    public void RefreshSelectedDependencies(ServerPackSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (_resolvedEvidence.TryGetValue(source, out var evidence))
+        {
+            PromoteRequiredDependencies(source.Mods, evidence);
+        }
+    }
+
+    private async Task ResolveCurseForgeEvidenceAsync(
+        IReadOnlyDictionary<ServerModEntry, ModEvidence> evidence,
+        CancellationToken cancellationToken)
+    {
+        if (_curseForge is null || _curseForge.ApiKey.Length == 0)
+        {
+            return;
+        }
+
+        var entriesByFileId = new Dictionary<long, List<ServerModEntry>>();
+        foreach (ServerModEntry entry in evidence.Keys)
+        {
+            if (entry.Disabled || entry.ContentItem is not { } item ||
+                !long.TryParse(item.FileId, NumberStyles.None, CultureInfo.InvariantCulture, out long fileId) ||
+                fileId <= 0)
+            {
+                continue;
+            }
+
+            if (!entriesByFileId.TryGetValue(fileId, out List<ServerModEntry>? entries))
+            {
+                entries = [];
+                entriesByFileId[fileId] = entries;
+            }
+            entries.Add(entry);
+        }
+        if (entriesByFileId.Count == 0)
+        {
+            return;
+        }
+
+        IReadOnlyDictionary<long, CurseForgeFile> files;
+        try
+        {
+            files = await _curseForge.GetFilesByIdsAsync(entriesByFileId.Keys, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (PlatformApiException exception)
+        {
+            _logWarning?.Invoke($"Could not read exact CurseForge file metadata: {exception.Message}");
+            return;
+        }
+
+        var verified = new List<(ServerModEntry Entry, CurseForgeFile File)>();
+        foreach ((long fileId, List<ServerModEntry> entries) in entriesByFileId)
+        {
+            if (!files.TryGetValue(fileId, out CurseForgeFile? file) ||
+                file.Id != fileId || file.ModId <= 0)
+            {
+                _logWarning?.Invoke($"CurseForge did not return exact file metadata for file {fileId}.");
+                continue;
+            }
+
+            foreach (ServerModEntry entry in entries)
+            {
+                if (MatchesExactCurseForgeFile(entry.ContentItem!, file, out string reason))
+                {
+                    verified.Add((entry, file));
+                }
+                else
+                {
+                    _logWarning?.Invoke($"Ignored mismatched CurseForge identity for '{entry.Name}': {reason}");
+                }
+            }
+        }
+        if (verified.Count == 0)
+        {
+            return;
+        }
+
+        IReadOnlyDictionary<long, CurseForgeProject> projects;
+        try
+        {
+            projects = await _curseForge.GetProjectsByIdsAsync(
+                    verified.Select(candidate => candidate.File.ModId),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (PlatformApiException exception)
+        {
+            _logWarning?.Invoke($"Could not read exact CurseForge project metadata: {exception.Message}");
+            return;
+        }
+
+        foreach ((ServerModEntry entry, CurseForgeFile file) in verified)
+        {
+            if (!projects.TryGetValue(file.ModId, out CurseForgeProject? project) ||
+                project.Id != file.ModId || project.ClassId != 6)
+            {
+                _logWarning?.Invoke(
+                    $"Ignored invalid CurseForge project metadata for exact file {file.Id} ('{entry.Name}').");
+                continue;
+            }
+
+            ModEvidence itemEvidence = evidence[entry];
+            itemEvidence.CurseForgeFile = file;
+            itemEvidence.CurseForgeProject = project;
+            EnrichCurseForgeIdentity(entry.ContentItem!, file, project);
+        }
+    }
+
+    private static bool MatchesExactCurseForgeFile(
+        ContentItem item,
+        CurseForgeFile file,
+        out string reason)
+    {
+        if (item.FileSize > 0 && file.FileLength > 0 && item.FileSize != file.FileLength)
+        {
+            reason = $"declared size {item.FileSize} differs from exact file size {file.FileLength}";
+            return false;
+        }
+
+        IReadOnlyDictionary<string, string> exactHashes = SearchMatcher.ExtractCurseForgeHashes(file);
+        foreach ((string algorithm, string declaredHash) in item.Hashes)
+        {
+            if (exactHashes.TryGetValue(algorithm, out string? exactHash) &&
+                !declaredHash.Trim().Equals(exactHash.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"declared {algorithm} hash differs from the exact file hash";
+                return false;
+            }
+        }
+
+        if (item.Source.Equals("curseforge", StringComparison.OrdinalIgnoreCase) &&
+            long.TryParse(item.ProjectId, NumberStyles.None, CultureInfo.InvariantCulture, out long projectId) &&
+            projectId > 0 && projectId != file.ModId)
+        {
+            reason = $"declared project {projectId} differs from exact file project {file.ModId}";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    private static void EnrichCurseForgeIdentity(
+        ContentItem item,
+        CurseForgeFile file,
+        CurseForgeProject project)
+    {
+        string projectId = project.Id.ToString(CultureInfo.InvariantCulture);
+        item.CurseForgeSlug = project.Slug.Trim();
+        if (item.ProjectId.Length == 0 ||
+            item.Source.Length == 0 ||
+            item.Source.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            item.ProjectId = projectId;
+            item.Source = "curseforge";
+            item.IdentityLocked = true;
+        }
+        if (item.OriginalProjectId.Length == 0)
+        {
+            item.OriginalProjectId = projectId;
+        }
+        if (item.OriginalSource.Length == 0 ||
+            item.OriginalSource.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            item.OriginalSource = "curseforge";
+        }
+
+        MergeDependencies(
+            item,
+            (file.Dependencies ?? [])
+                .Where(dependency => dependency.ModId > 0)
+                .Select(DependencyReference.FromCurseForge));
+        item.DependencyMetadataAvailable = file.Dependencies is not null;
+    }
+
+    private static void MergeDependencies(
+        ContentItem item,
+        IEnumerable<DependencyReference> dependencies)
+    {
+        foreach (DependencyReference dependency in dependencies)
+        {
+            bool exists = item.TargetDependencies.Any(existing =>
+                existing.Source.Equals(dependency.Source, StringComparison.OrdinalIgnoreCase) &&
+                existing.ProjectId.Equals(dependency.ProjectId, StringComparison.OrdinalIgnoreCase) &&
+                existing.VersionId.Equals(dependency.VersionId, StringComparison.OrdinalIgnoreCase) &&
+                existing.FileName.Equals(dependency.FileName, StringComparison.OrdinalIgnoreCase) &&
+                existing.DependencyType.Equals(dependency.DependencyType, StringComparison.OrdinalIgnoreCase));
+            if (!exists)
+            {
+                item.TargetDependencies.Add(dependency);
+            }
+        }
     }
 
     private async Task InspectConnectorCandidatesAsync(
@@ -477,6 +717,24 @@ public sealed class ServerModSupportResolver
                 ServerSupportKinds.Unsupported,
                 "The Fabric common entrypoint directly references client-only APIs.");
         }
+        if (environment is "server" or "dedicated_server")
+        {
+            return new Classification(
+                ServerSupportKinds.Recommended,
+                "Loader metadata declares a dedicated-server mod.");
+        }
+        if (evidence.Metadata?.HasServerEntrypoint == true)
+        {
+            return new Classification(
+                ServerSupportKinds.Recommended,
+                "Loader metadata declares a dedicated-server entrypoint.");
+        }
+        if (IsKnownOptionalClient(entry, evidence))
+        {
+            return new Classification(
+                ServerSupportKinds.Optional,
+                "This client convenience or configuration mod can be omitted from the server.");
+        }
         if (IsKnownServerLibrary(entry, evidence))
         {
             return new Classification(
@@ -505,18 +763,6 @@ public sealed class ServerModSupportResolver
             return new Classification(
                 ServerSupportKinds.Recommended,
                 "This mod provides a known server feature and should be included on the server.");
-        }
-        if (environment is "server" or "dedicated_server")
-        {
-            return new Classification(
-                ServerSupportKinds.Recommended,
-                "Loader metadata declares a dedicated-server mod.");
-        }
-        if (evidence.Metadata?.HasServerEntrypoint == true)
-        {
-            return new Classification(
-                ServerSupportKinds.Recommended,
-                "Loader metadata declares a dedicated-server entrypoint.");
         }
         if (manifestServer == "required")
         {
@@ -578,6 +824,12 @@ public sealed class ServerModSupportResolver
             {
                 byProjectId.TryAdd(project.EffectiveId, entry);
             }
+            if (evidence[entry].CurseForgeProject is { } curseForgeProject)
+            {
+                byProjectId.TryAdd(
+                    curseForgeProject.Id.ToString(CultureInfo.InvariantCulture),
+                    entry);
+            }
             if (evidence[entry].Version is { } version)
             {
                 byProjectId.TryAdd(version.ProjectId, entry);
@@ -608,18 +860,29 @@ public sealed class ServerModSupportResolver
                 var metadata = evidence[owner].Metadata;
                 if (metadata is not null)
                 {
-                    foreach (var relation in metadata.Relations.Where(relation =>
-                                 relation.Kind == CompatibilityRelationKinds.Required &&
-                                 relation.ReferenceType == CompatibilityReferenceTypes.ModId))
+                    foreach (var relation in metadata.Relations.Where(IsServerRequiredModRelation))
                     {
                         string reference = relation.ExactReference.Length > 0
                             ? relation.ExactReference
                             : relation.Reference;
                         if (byId.TryGetValue(reference, out var dependency))
                         {
-                            changed |= PromoteDependency(dependency, owner, evidence[dependency]);
+                            changed |= ApplyRequiredDependency(
+                                dependency,
+                                owner,
+                                evidence[dependency],
+                                evidence[owner]);
+                            if (!owner.Selected)
+                            {
+                                break;
+                            }
                         }
                     }
+                }
+
+                if (!owner.Selected)
+                {
+                    continue;
                 }
 
                 foreach (var dependencyReference in GetRequiredDependencies(owner, evidence[owner]))
@@ -635,12 +898,25 @@ public sealed class ServerModSupportResolver
                     }
                     if (dependency is not null)
                     {
-                        changed |= PromoteDependency(dependency, owner, evidence[dependency]);
+                        changed |= ApplyRequiredDependency(
+                            dependency,
+                            owner,
+                            evidence[dependency],
+                            evidence[owner]);
+                        if (!owner.Selected)
+                        {
+                            break;
+                        }
                     }
                 }
             }
         } while (changed);
     }
+
+    private static bool IsServerRequiredModRelation(CompatibilityRelation relation) =>
+        relation.Kind == CompatibilityRelationKinds.Required &&
+        relation.ReferenceType == CompatibilityReferenceTypes.ModId &&
+        !relation.Side.Equals("client", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<DependencyReference> GetRequiredDependencies(
         ServerModEntry entry,
@@ -654,14 +930,18 @@ public sealed class ServerModSupportResolver
             .Where(dependency => dependency.DependencyType.Equals("required", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool PromoteDependency(
+    private static bool ApplyRequiredDependency(
         ServerModEntry dependency,
         ServerModEntry owner,
-        ModEvidence dependencyEvidence)
+        ModEvidence dependencyEvidence,
+        ModEvidence ownerEvidence)
     {
+        if (dependency.ServerSupport == ServerSupportKinds.Unsupported &&
+            HasHardServerIncompatibility(dependency, dependencyEvidence))
+        {
+            return BlockOwnerForDependency(owner, dependency, ownerEvidence);
+        }
         if (dependency.Disabled ||
-            (dependency.ServerSupport == ServerSupportKinds.Unsupported &&
-             HasHardServerIncompatibility(dependency, dependencyEvidence)) ||
             (dependency.ServerSupport == ServerSupportKinds.Recommended && dependency.Selected))
         {
             return false;
@@ -672,6 +952,28 @@ public sealed class ServerModSupportResolver
         if (dependency.ContentItem is not null)
         {
             dependency.ContentItem.Excluded = false;
+        }
+        return true;
+    }
+
+    private static bool BlockOwnerForDependency(
+        ServerModEntry owner,
+        ServerModEntry dependency,
+        ModEvidence ownerEvidence)
+    {
+        if (!owner.Selected && owner.ServerSupport == ServerSupportKinds.Unsupported)
+        {
+            return false;
+        }
+
+        ownerEvidence.BlockedByUnsupportedDependency = true;
+        owner.ServerSupport = ServerSupportKinds.Unsupported;
+        owner.SupportReason =
+            $"Required server dependency '{dependency.Name}' is not supported on a dedicated server.";
+        owner.Selected = false;
+        if (owner.ContentItem is not null)
+        {
+            owner.ContentItem.Excluded = true;
         }
         return true;
     }
@@ -691,13 +993,28 @@ public sealed class ServerModSupportResolver
     private static bool IsKnownServerLibrary(ServerModEntry entry, ModEvidence evidence) =>
         GetPrimaryIdentityValues(entry, evidence).Any(KnownServerLibraryIds.Contains);
 
+    private static bool IsKnownOptionalClient(ServerModEntry entry, ModEvidence evidence)
+    {
+        foreach (string value in GetPrimaryIdentityValues(entry, evidence))
+        {
+            if (KnownOptionalClientProjectIds.Contains(value.Trim()) ||
+                KnownOptionalClientIdentifiers.Contains(NormalizeIdentity(value)) ||
+                TokenizeIdentity(value).Any(KnownOptionalClientIdentifiers.Contains))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static bool HasHardServerIncompatibility(ServerModEntry entry, ModEvidence evidence)
     {
         string manifestServer = entry.ContentItem?.Environment.GetValueOrDefault("server", string.Empty)
             .Trim().ToLowerInvariant() ?? string.Empty;
         string environment = evidence.Metadata?.ServerEnvironment.Trim().ToLowerInvariant() ?? string.Empty;
         string platformSide = evidence.Project?.ServerSide.Trim().ToLowerInvariant() ?? string.Empty;
-        return environment == "client" ||
+        return evidence.BlockedByUnsupportedDependency ||
+               environment == "client" ||
                manifestServer == "unsupported" ||
                platformSide == "unsupported" ||
                evidence.Metadata?.HasUnsafeClientReferencesInCommonEntrypoint == true ||
@@ -711,6 +1028,8 @@ public sealed class ServerModSupportResolver
             string normalized = NormalizeIdentity(value);
             if (KnownClientOnlyProjectIds.Contains(value.Trim()) ||
                 KnownClientOnlyIdentifiers.Contains(normalized) ||
+                KnownClientOnlyNormalizedFragments.Any(fragment =>
+                    normalized.Contains(fragment, StringComparison.OrdinalIgnoreCase)) ||
                 KnownClientOnlyIdentifiers.Any(identifier =>
                     identifier.Length >= 8 && normalized.Contains(identifier, StringComparison.OrdinalIgnoreCase)))
             {
@@ -793,6 +1112,12 @@ public sealed class ServerModSupportResolver
             yield return project.Slug;
             yield return project.Title;
         }
+        if (evidence.CurseForgeProject is { } curseForgeProject)
+        {
+            yield return curseForgeProject.Id.ToString(CultureInfo.InvariantCulture);
+            yield return curseForgeProject.Slug;
+            yield return curseForgeProject.Name;
+        }
         if (evidence.Version is { } version)
         {
             yield return version.ProjectId;
@@ -858,6 +1183,9 @@ public sealed class ServerModSupportResolver
         public ArtifactCompatibilityMetadata? Metadata { get; set; } = metadata;
         public ModrinthVersion? Version { get; set; }
         public ModrinthProject? Project { get; set; }
+        public CurseForgeFile? CurseForgeFile { get; set; }
+        public CurseForgeProject? CurseForgeProject { get; set; }
+        public bool BlockedByUnsupportedDependency { get; set; }
     }
 
     private readonly record struct Classification(string Support, string Reason);

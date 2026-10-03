@@ -228,7 +228,7 @@ public sealed partial class LoaderVersionService : IDisposable
     private async Task<byte[]> GetBytesAsync(string url, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("User-Agent", "FengchenWD/MCPackMigrator/1.0.0-beta.1");
+        request.Headers.TryAddWithoutValidation("User-Agent", "FengchenWD/MCPackMigrator/1.0.0-beta.6.1");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_requestTimeout);
         using var response = await _httpClient.SendAsync(

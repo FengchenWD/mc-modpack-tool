@@ -11,6 +11,7 @@ public sealed class ServerPackBuilder : IDisposable
     };
 
     private readonly ServerCoreService _coreService;
+    private readonly ServerRuntimeValidator _runtimeValidator = new();
     private readonly HttpClient _httpClient;
     private readonly bool _ownsCoreService;
     private readonly bool _ownsHttpClient;
@@ -89,6 +90,27 @@ public sealed class ServerPackBuilder : IDisposable
             {
                 progress?.Report(ServerBuildPhase.CopyingConfiguration);
                 await CopyOptionalDirectoriesAsync(request, stagingRoot, cancellationToken).ConfigureAwait(false);
+            }
+            if (request.DeepValidate)
+            {
+                progress?.Report(ServerBuildPhase.ValidatingRuntime);
+                ServerRuntimeValidationResult validation = await _runtimeValidator.ValidateAsync(
+                    stagingRoot,
+                    coreResult.LaunchCommand,
+                    javaExecutable,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (!validation.Succeeded)
+                {
+                    string tail = string.Join(
+                        Environment.NewLine,
+                        validation.LogTail.TakeLast(80));
+                    result.MissingFiles.Add(
+                        "Server runtime validation failed: "
+                        + validation.Error
+                        + (tail.Length == 0 ? string.Empty : Environment.NewLine + tail));
+                    return result;
+                }
+                result.RuntimeValidated = true;
             }
             if (request.World is not null)
             {

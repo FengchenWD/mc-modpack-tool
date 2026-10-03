@@ -117,6 +117,87 @@ public sealed class ClientPackBuilder : IDisposable
         }
     }
 
+    public static bool CanResolvePlatformProject(ClientContentEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (entry.IsDirectory || entry.Disabled || string.IsNullOrWhiteSpace(entry.RelativePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            return IsPlatformEligible(entry, NormalizeRelativePath(entry.RelativePath));
+        }
+        catch (InvalidDataException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<ClientPlatformProjectMatch?> ResolvePlatformProjectAsync(
+        ClientContentEntry entry,
+        string platform,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        bool modrinth = platform.Equals(ClientPackFormats.Modrinth, StringComparison.OrdinalIgnoreCase);
+        bool curseForge = platform.Equals(ClientPackFormats.CurseForge, StringComparison.OrdinalIgnoreCase);
+        if (!modrinth && !curseForge)
+        {
+            throw new ArgumentException("不支持的平台。", nameof(platform));
+        }
+        if (!CanResolvePlatformProject(entry))
+        {
+            return null;
+        }
+
+        string relativePath = NormalizeRelativePath(entry.RelativePath);
+        var plan = new ClientFilePlan(
+            Path.GetFullPath(entry.SourcePath),
+            relativePath,
+            entry.Name,
+            entry.Kind,
+            entry.Disabled,
+            PlatformEligible: true);
+        FileHashInfo hash = await ComputeHashAsync(plan, curseForge, cancellationToken)
+            .ConfigureAwait(false);
+        var diagnostics = new ClientBuildResult();
+        IReadOnlyDictionary<string, RemoteMatch> matches = curseForge
+            ? await MatchCurseForgeAsync(
+                [hash],
+                diagnostics,
+                cancellationToken,
+                projectIdentificationOnly: true).ConfigureAwait(false)
+            : await MatchModrinthAsync([hash], diagnostics, cancellationToken).ConfigureAwait(false);
+        if (!matches.TryGetValue(relativePath, out RemoteMatch? match))
+        {
+            return null;
+        }
+
+        if (curseForge)
+        {
+            return new ClientPlatformProjectMatch
+            {
+                Platform = ClientPackFormats.CurseForge,
+                ProjectId = match.CurseForgeProjectId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ProjectSlug = match.ProjectSlug,
+                ProjectUrl = CurseForgeClient.MakeProjectUrl(
+                    match.ProjectSlug,
+                    match.CurseForgeProjectId,
+                    ToPlatformCategory(entry.Kind)),
+            };
+        }
+
+        return new ClientPlatformProjectMatch
+        {
+            Platform = ClientPackFormats.Modrinth,
+            ProjectId = match.ProjectId,
+            ProjectSlug = match.ProjectSlug,
+            ProjectUrl = ModrinthClient.MakeProjectUrl(match.ProjectId, match.ProjectSlug, entry.Kind),
+        };
+    }
+
     private static void ValidateRequest(ClientBuildRequest request)
     {
         ArgumentNullException.ThrowIfNull(request.Source);
@@ -357,6 +438,7 @@ public sealed class ClientPackBuilder : IDisposable
                 file.Size > 0 ? file.Size : hash.Length,
                 verifiedHashes,
                 version.ProjectId,
+                string.Empty,
                 version.Id,
                 0,
                 0);
@@ -367,7 +449,8 @@ public sealed class ClientPackBuilder : IDisposable
     private async Task<IReadOnlyDictionary<string, RemoteMatch>> MatchCurseForgeAsync(
         IReadOnlyList<FileHashInfo> hashes,
         ClientBuildResult result,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool projectIdentificationOnly = false)
     {
         IReadOnlyDictionary<uint, CurseForgeFile> files = await _curseForge.LookupByFingerprintsAsync(
             hashes.Where(hash => hash.CurseForgeFingerprint.HasValue)
@@ -387,9 +470,9 @@ public sealed class ClientPackBuilder : IDisposable
             }
             if (!files.TryGetValue(hash.CurseForgeFingerprint.Value, out CurseForgeFile? file)
                 || file.ModId <= 0 || file.Id <= 0
-                || file.FileLength > 0 && file.FileLength != hash.Length
-                || !CurseForgeHashMatches(file, hash.Sha1)
-                || !CurseForgePathMatches(file, hash.Plan)
+                || !CurseForgeLengthMatches(file, hash.Length, projectIdentificationOnly)
+                || !CurseForgeHashMatches(file, hash.Sha1, requireDeclaredHash: projectIdentificationOnly)
+                || (!projectIdentificationOnly && !CurseForgePathMatches(file, hash.Plan))
                 || !projects.TryGetValue(file.ModId, out CurseForgeProject? project)
                 || !CurseForgeClassMatches(project.ClassId, hash.Plan.Kind))
             {
@@ -407,6 +490,7 @@ public sealed class ClientPackBuilder : IDisposable
                 file.FileLength > 0 ? file.FileLength : hash.Length,
                 new Dictionary<string, string> { ["sha1"] = hash.Sha1 },
                 file.ModId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                project.Slug,
                 string.Empty,
                 file.ModId,
                 file.Id);
@@ -748,11 +832,25 @@ public sealed class ClientPackBuilder : IDisposable
     private static bool IsUnderDirectory(string relativePath, string directory) =>
         relativePath.StartsWith($"{directory}/", StringComparison.OrdinalIgnoreCase);
 
-    private static bool CurseForgeHashMatches(CurseForgeFile file, string sha1)
+    private static bool CurseForgeLengthMatches(
+        CurseForgeFile file,
+        long length,
+        bool requireDeclaredLength) =>
+        requireDeclaredLength
+            ? file.FileLength > 0 && file.FileLength == length
+            : file.FileLength <= 0 || file.FileLength == length;
+
+    private static bool CurseForgeHashMatches(
+        CurseForgeFile file,
+        string sha1,
+        bool requireDeclaredHash = false)
     {
         CurseForgeHash? declared = file.Hashes?.FirstOrDefault(hash => hash.Algorithm == 1);
-        return declared is null || string.IsNullOrWhiteSpace(declared.Value)
-            || declared.Value.Equals(sha1, StringComparison.OrdinalIgnoreCase);
+        if (declared is null || string.IsNullOrWhiteSpace(declared.Value))
+        {
+            return !requireDeclaredHash;
+        }
+        return declared.Value.Equals(sha1, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool CurseForgePathMatches(CurseForgeFile file, ClientFilePlan plan)
@@ -779,6 +877,13 @@ public sealed class ClientPackBuilder : IDisposable
         ClientContentKinds.ResourcePack => classId == 12,
         ClientContentKinds.ShaderPack => classId == 6552,
         _ => false,
+    };
+
+    private static string ToPlatformCategory(string kind) => kind switch
+    {
+        ClientContentKinds.ResourcePack => "resourcepack",
+        ClientContentKinds.ShaderPack => "shaderpack",
+        _ => "mod",
     };
 
     private static bool TryGetDeclaredHash(
@@ -906,6 +1011,7 @@ public sealed class ClientPackBuilder : IDisposable
         long FileSize,
         IReadOnlyDictionary<string, string> Hashes,
         string ProjectId,
+        string ProjectSlug,
         string VersionId,
         long CurseForgeProjectId,
         long CurseForgeFileId);

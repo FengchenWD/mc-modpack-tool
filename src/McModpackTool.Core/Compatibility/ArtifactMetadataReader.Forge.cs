@@ -28,7 +28,7 @@ public static partial class ArtifactMetadataReader
             }
             else if (section.StartsWith("dependencies.", StringComparison.OrdinalIgnoreCase))
             {
-                AddForgeDependency(values, builder.Relations);
+                AddForgeDependency(values, builder);
             }
             values.Clear();
         }
@@ -61,7 +61,7 @@ public static partial class ArtifactMetadataReader
 
     private static void AddForgeDependency(
         IReadOnlyDictionary<string, string> values,
-        ICollection<CompatibilityRelation> destination)
+        MetadataBuilder builder)
     {
         var reference = values.GetValueOrDefault("modId", string.Empty).Trim();
         if (reference.Length == 0)
@@ -84,15 +84,47 @@ public static partial class ArtifactMetadataReader
             return;
         }
 
-        destination.Add(new CompatibilityRelation
+        string side = NormalizeForgeSide(values.GetValueOrDefault("side", string.Empty));
+        builder.Relations.Add(new CompatibilityRelation
         {
             Kind = kind,
             Reference = reference,
             ExactReference = reference,
             ReferenceType = CompatibilityReferenceTypes.ModId,
             VersionRequirement = values.GetValueOrDefault("versionRange", string.Empty).Trim(),
+            Side = side,
         });
+
+        if (kind == CompatibilityRelationKinds.Required && IsForgeEnvironmentDependency(reference))
+        {
+            builder.ForgeEnvironmentDependenciesAllClient &= side == "client";
+            if (builder.ForgeEnvironmentDependenciesAllClient &&
+                string.IsNullOrWhiteSpace(builder.ServerEnvironment))
+            {
+                builder.ServerEnvironment = "client";
+                builder.ServerEnvironmentInferredFromForgeDependencies = true;
+            }
+            else if (!builder.ForgeEnvironmentDependenciesAllClient &&
+                     builder.ServerEnvironmentInferredFromForgeDependencies)
+            {
+                builder.ServerEnvironment = string.Empty;
+                builder.ServerEnvironmentInferredFromForgeDependencies = false;
+            }
+        }
     }
+
+    private static bool IsForgeEnvironmentDependency(string reference) =>
+        reference.Equals("minecraft", StringComparison.OrdinalIgnoreCase) ||
+        reference.Equals("forge", StringComparison.OrdinalIgnoreCase) ||
+        reference.Equals("neoforge", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeForgeSide(string value) => value.Trim().ToLowerInvariant() switch
+    {
+        "client" => "client",
+        "server" or "dedicated_server" => "server",
+        "both" or "" => "both",
+        _ => value.Trim().ToLowerInvariant(),
+    };
 
     private static string StripTomlComment(string line)
     {

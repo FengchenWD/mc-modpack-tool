@@ -16,6 +16,8 @@ internal static class AppWorkflowTests
     {
         OutputNamesTrackTargetVersion();
         SourcePackNamesPreferInputFilesAndHandleIncompletePaths();
+        ServerProjectLinksKeepPlatformIdentitiesSeparate();
+        ServerRowsReflectDependencyAndDisabledState();
         TargetValidationRejectsMalformedMinecraftVersions();
         AgreementContainsRequiredTermsInEveryLanguage();
         LocalizationCatalogCoversVisibleKeys();
@@ -31,6 +33,27 @@ internal static class AppWorkflowTests
         Assert(MigrationView.GenerateOutputPackName("1.21.10 录制", "1.21.1", "1.21.11") == "1.21.11 录制", "A leading version in the source name must not be duplicated when manifest metadata differs.");
         Assert(MigrationView.GenerateOutputPackName("1.21.11 录制", "1.21.1", "1.21.11") == "1.21.11 录制", "An already-targeted source name must remain stable.");
         Assert(MigrationView.GenerateOutputPackName("录制", "1.21.1", "1.21.11") == "1.21.11 录制", "Target should prefix a name without a source version.");
+    }
+
+    private static void ServerRowsReflectDependencyAndDisabledState()
+    {
+        Type rowType = typeof(ServerView).GetNestedType("ServerModRow", BindingFlags.NonPublic)!;
+        int selectionCallbacks = 0;
+        var entry = new ServerModEntry
+        {
+            Name = "Framework.jar.disabled",
+            Disabled = true,
+            Selected = false,
+            ServerSupport = ServerSupportKinds.Unknown,
+        };
+        object row = Activator.CreateInstance(rowType, entry, (Action)(() => selectionCallbacks++))!;
+        Assert((string)rowType.GetProperty("Support")!.GetValue(row)! == McModpackTool.App.App.Localization["server.support.disabled"],
+            "Disabled mods must have an explicit disabled label instead of Unknown.");
+        entry.Selected = true;
+        rowType.GetMethod("RefreshFromEntry")!.Invoke(row, null);
+        Assert((bool)rowType.GetProperty("Selected")!.GetValue(row)!,
+            "The UI must reflect the dependency resolver's current selection.");
+        Assert(selectionCallbacks == 0, "Refreshing a row must not recursively trigger selection changes.");
     }
 
     private static void SourcePackNamesPreferInputFilesAndHandleIncompletePaths()
@@ -66,6 +89,64 @@ internal static class AppWorkflowTests
                     exception);
             }
         }
+    }
+
+    private static void ServerProjectLinksKeepPlatformIdentitiesSeparate()
+    {
+        MethodInfo resolver = typeof(ServerView).GetMethod(
+            "ResolveServerProjectUrl",
+            BindingFlags.NonPublic | BindingFlags.Static) ??
+            throw new InvalidOperationException("Server project URL resolver was not found.");
+
+        string Resolve(ContentItem? item, string platform)
+            => resolver.Invoke(null, [item, platform]) as string
+               ?? throw new InvalidOperationException("Server project URL resolver returned null.");
+
+        var curseForgeItem = new ContentItem
+        {
+            Source = "curseforge",
+            ProjectId = "12345",
+            ModrinthSlug = "modrinth-counterpart",
+        };
+        Assert(
+            Resolve(curseForgeItem, "curseforge") ==
+            "https://www.curseforge.com/minecraft/mc-mods/12345",
+            "A CurseForge item should use its numeric CurseForge project ID.");
+        Assert(
+            Resolve(curseForgeItem, "modrinth") ==
+            "https://modrinth.com/mod/modrinth-counterpart",
+            "A CurseForge project ID must not be reused as a Modrinth project ID.");
+
+        var migratedIdentity = new ContentItem
+        {
+            Source = "curseforge",
+            ProjectId = "67890",
+            OriginalSource = "modrinth",
+            OriginalProjectId = "original-modrinth-id",
+        };
+        Assert(
+            Resolve(migratedIdentity, "modrinth") ==
+            "https://modrinth.com/mod/original-modrinth-id",
+            "An original Modrinth identity should use OriginalProjectId, not the current CurseForge ID.");
+
+        var reverseMigratedIdentity = new ContentItem
+        {
+            Source = "modrinth",
+            ProjectId = "current-modrinth-id",
+            OriginalSource = "curseforge",
+            OriginalProjectId = "24680",
+        };
+        Assert(
+            Resolve(reverseMigratedIdentity, "curseforge") ==
+            "https://www.curseforge.com/minecraft/mc-mods/24680",
+            "An original CurseForge identity should use OriginalProjectId, not the current Modrinth ID.");
+
+        Assert(
+            Resolve(new ContentItem(), "curseforge") == string.Empty,
+            "An unidentified local item must not open a generic CurseForge search page.");
+        Assert(
+            Resolve(new ContentItem(), "modrinth") == string.Empty,
+            "An unidentified local item must not open a generic Modrinth search page.");
     }
 
     private static void TargetValidationRejectsMalformedMinecraftVersions()
@@ -324,6 +405,32 @@ internal static class AppWorkflowTests
                 languageCombo.ApplyTemplate();
                 Assert(languageCombo.Template.FindName("PART_Popup", languageCombo) is System.Windows.Controls.Primitives.Popup,
                     "The custom ComboBox popup template was not applied.");
+                var contextMenu = new System.Windows.Controls.ContextMenu();
+                var contextMenuItem = new System.Windows.Controls.MenuItem { Header = "Action" };
+                contextMenu.Items.Add(contextMenuItem);
+                contextMenu.ApplyTemplate();
+                contextMenuItem.ApplyTemplate();
+                Assert(contextMenu.OverridesDefaultStyle && contextMenu.MinWidth == 164 &&
+                       VisualTreeHelper.GetChildrenCount(contextMenu) == 1 &&
+                       VisualTreeHelper.GetChild(contextMenu, 0) is System.Windows.Controls.Border &&
+                       contextMenuItem.OverridesDefaultStyle &&
+                       VisualTreeHelper.GetChildrenCount(contextMenuItem) == 1 &&
+                       VisualTreeHelper.GetChild(contextMenuItem, 0) is System.Windows.Controls.Border,
+                    "Context menus and their items must bypass the system templates that add an icon gutter.");
+                var migrationView = new MigrationView();
+                var migrationFiles = (System.Windows.Controls.DataGrid)migrationView.FindName("FilesGrid");
+                var compactMenuStyle = (Style)application.FindResource("CompactContextMenuStyle");
+                var compactItemStyle = (Style)application.FindResource("CompactContextMenuItemStyle");
+                var migrationSeparator = migrationFiles.ContextMenu?.Items.OfType<System.Windows.Controls.Separator>().Single()
+                    ?? throw new InvalidOperationException("The migration context-menu separator was not found.");
+                migrationSeparator.ApplyTemplate();
+                Assert(ReferenceEquals(migrationFiles.ContextMenu?.Style, compactMenuStyle) &&
+                       migrationFiles.ContextMenu.Items.OfType<System.Windows.Controls.MenuItem>()
+                           .All(item => ReferenceEquals(item.Style, compactItemStyle)) &&
+                       migrationSeparator.Height == 1 && migrationSeparator.Margin == new Thickness(8, 4, 8, 4) &&
+                       VisualTreeHelper.GetChildrenCount(migrationSeparator) == 1 &&
+                       VisualTreeHelper.GetChild(migrationSeparator, 0) is System.Windows.Controls.Border,
+                    "The migration context menu must explicitly use compact menu, item, and separator templates.");
 
                 string resourceAssembly = Uri.EscapeDataString(
                     typeof(McModpackTool.App.App).Assembly.GetName().Name ?? "McModpackTool.App");
@@ -362,6 +469,17 @@ internal static class AppWorkflowTests
             var log = (System.Windows.Controls.TextBox)view.FindName("LogBox");
             var mods = (System.Windows.Controls.DataGrid)view.FindName("ModsGrid");
             var config = (System.Windows.Controls.CheckBox)view.FindName("ConfigCheckBox");
+            Assert(
+                mods.ColumnHeaderStyle is not null &&
+                mods.Columns[0].CanUserResize == false &&
+                mods.Columns[0].Width.IsAbsolute && mods.Columns[0].Width.Value == 46 &&
+                mods.ContextMenu?.Items.OfType<System.Windows.Controls.MenuItem>().Select(item => item.Header).SequenceEqual(
+                    new object[]
+                    {
+                        McModpackTool.App.App.Localization["action.open_curseforge"],
+                        McModpackTool.App.App.Localization["action.open_modrinth"],
+                    }) == true,
+                "The server mod table must keep its checkbox column fixed while exposing resize dividers and both platform actions.");
 
             input.Text = "D:\\directory-instance";
             version.Text = "1.21.1";
@@ -553,6 +671,24 @@ internal static class AppWorkflowTests
                groups.Items.Cast<object>().All(group =>
                    !Equals(group.GetType().GetProperty("Kind")?.GetValue(group), ClientContentKinds.Other)),
             "Other mod data must be merged into the minimap, world map, and mod data group.");
+        object modRows = modGroup.GetType().GetProperty("Items")?.GetValue(modGroup) ??
+            throw new InvalidOperationException("Client mod rows were not found.");
+        object modRow = ((System.Collections.IEnumerable)modRows).Cast<object>().Single();
+        object worldRows = worldGroup.GetType().GetProperty("Items")?.GetValue(worldGroup) ??
+            throw new InvalidOperationException("Client world rows were not found.");
+        object worldRow = ((System.Collections.IEnumerable)worldRows).Cast<object>().Single();
+        Assert(Equals(modRow.GetType().GetProperty("CanOpenProject")?.GetValue(modRow), true) &&
+               Equals(worldRow.GetType().GetProperty("CanOpenProject")?.GetValue(worldRow), false),
+            "Only exact-hash eligible client content rows may open a platform project menu.");
+        var groupTemplateRoot = (DependencyObject)groups.ItemTemplate.LoadContent();
+        var rowItemsControl = FindLogicalDescendant<System.Windows.Controls.ItemsControl>(groupTemplateRoot) ??
+            throw new InvalidOperationException("Client content row ItemsControl was not found.");
+        var rowTemplateRoot = (System.Windows.Controls.Grid)rowItemsControl.ItemTemplate.LoadContent();
+        Assert(rowTemplateRoot.ContextMenu?.Items.Count == 2 &&
+               rowTemplateRoot.ContextMenu.Items.Cast<object>().OfType<System.Windows.Controls.MenuItem>()
+                   .Select(item => item.Tag as string)
+                   .SequenceEqual([ClientPackFormats.CurseForge, ClientPackFormats.Modrinth]),
+            "Client Mod, resource-pack, and shader-pack rows must expose exact CF/MR project links.");
         PropertyInfo expandedProperty = modGroup.GetType().GetProperty("IsExpanded") ??
             throw new InvalidOperationException("Client content group expansion state was not found.");
         Assert((bool)expandedProperty.GetValue(modGroup)! && !(bool)expandedProperty.GetValue(worldGroup)!,
@@ -574,6 +710,20 @@ internal static class AppWorkflowTests
             return ((System.Collections.IEnumerable)rows).Cast<object>().Any(row =>
                 Equals(row.GetType().GetProperty("Selected")?.GetValue(row), true));
         }
+    }
+
+    private static T? FindLogicalDescendant<T>(DependencyObject root) where T : DependencyObject
+    {
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is T match) return match;
+            if (child is DependencyObject dependencyObject &&
+                FindLogicalDescendant<T>(dependencyObject) is T nested)
+            {
+                return nested;
+            }
+        }
+        return null;
     }
 
     private static async Task LegacySettingsRoundTripPreservesAgreementAsync()

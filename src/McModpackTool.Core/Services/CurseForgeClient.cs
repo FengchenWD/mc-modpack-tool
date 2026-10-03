@@ -31,7 +31,7 @@ public sealed class CurseForgeClient : IDisposable
     public CurseForgeClient(
         string? apiKey = null,
         HttpClient? httpClient = null,
-        string userAgent = "MCPackMigrator/1.0.0-beta.1",
+        string userAgent = "MCPackMigrator/1.0.0-beta.6.1",
         TimeSpan? requestTimeout = null)
     {
         _ownsHttpClient = httpClient is null;

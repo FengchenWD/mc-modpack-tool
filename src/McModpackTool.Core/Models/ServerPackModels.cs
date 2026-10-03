@@ -27,6 +27,7 @@ public enum ServerBuildPhase
     CopyingMods,
     DownloadingMods,
     CopyingConfiguration,
+    ValidatingRuntime,
     CopyingWorld,
     WritingLaunchFiles,
     CompressingArchive,
@@ -99,6 +100,7 @@ public sealed class ServerBuildRequest
         = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public ServerWorldEntry? World { get; init; }
     public bool EulaAccepted { get; init; }
+    public bool DeepValidate { get; init; }
     public bool Overwrite { get; init; }
 }
 
@@ -106,5 +108,6 @@ public sealed class ServerBuildResult
 {
     public List<string> Warnings { get; } = [];
     public List<string> MissingFiles { get; } = [];
+    public bool RuntimeValidated { get; set; }
     public bool Succeeded => MissingFiles.Count == 0;
 }

@@ -13,6 +13,8 @@ public sealed partial class ServerCoreService
     private const string ForgeMavenBase = "https://maven.minecraftforge.net/net/minecraftforge/forge";
     private const string NeoForgeMavenBase = "https://maven.neoforged.net/releases/net/neoforged/neoforge";
     private const string LegacyNeoForgeMavenBase = "https://maven.neoforged.net/releases/net/neoforged/forge";
+    private const string NeoForgeMirrorMavenBase = "https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge";
+    private const string LegacyNeoForgeMirrorMavenBase = "https://bmclapi2.bangbang93.com/maven/net/neoforged/forge";
     private const string MohistApiBase = "https://mohistmc.com/api/v2/projects/mohist";
     private const string CatServerReleasesUrl = "https://api.github.com/repos/Luohuayu/CatServer/releases?per_page=100";
     private const string ModrinthApiBase = "https://api.modrinth.com/v2";
@@ -377,31 +379,46 @@ public sealed partial class ServerCoreService
             return null;
         }
         bool legacy1201 = query.MinecraftVersion == "1.20.1";
-        string mavenBase = legacy1201 ? LegacyNeoForgeMavenBase : NeoForgeMavenBase;
         string publishedVersion = legacy1201
             ? query.LoaderVersion.StartsWith("1.20.1-", StringComparison.Ordinal)
                 ? query.LoaderVersion
                 : $"1.20.1-{query.LoaderVersion}"
             : query.LoaderVersion;
         string artifactName = legacy1201 ? "forge" : "neoforge";
-        string metadata = await GetTextAsync($"{mavenBase}/maven-metadata.xml", cancellationToken)
-            .ConfigureAwait(false);
-        if (!ReadMavenVersions(metadata).Contains(publishedVersion, StringComparer.Ordinal))
+        string[] sources = legacy1201
+            ? [LegacyNeoForgeMavenBase, LegacyNeoForgeMirrorMavenBase]
+            : [NeoForgeMavenBase, NeoForgeMirrorMavenBase];
+        foreach (string mavenBase in sources)
         {
-            return null;
+            try
+            {
+                string url = $"{mavenBase}/{publishedVersion}/{artifactName}-{publishedVersion}-installer.jar";
+                // The requested loader version already came from the imported instance or
+                // pack manifest. Probe that exact artifact directly instead of downloading
+                // the ever-growing Maven metadata document, which is frequently slow or
+                // blocked on mainland-China networks.
+                string sha1 = await ReadRequiredSha1Async(url, cancellationToken).ConfigureAwait(false);
+                return JavaInstallerOption(
+                    ServerCoreIds.NeoForge,
+                    "NeoForge Server",
+                    query.LoaderVersion,
+                    query.MinecraftVersion,
+                    "neoforge",
+                    query.LoaderVersion,
+                    url,
+                    $".installers/neoforge-{query.LoaderVersion}-installer.jar",
+                    sha1);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logWarning?.Invoke($"NeoForge Maven source failed ({mavenBase}): {exception.Message}");
+            }
         }
-        string url = $"{mavenBase}/{publishedVersion}/{artifactName}-{publishedVersion}-installer.jar";
-        string sha1 = await ReadRequiredSha1Async(url, cancellationToken).ConfigureAwait(false);
-        return JavaInstallerOption(
-            ServerCoreIds.NeoForge,
-            "NeoForge Server",
-            query.LoaderVersion,
-            query.MinecraftVersion,
-            "neoforge",
-            query.LoaderVersion,
-            url,
-            $".installers/neoforge-{query.LoaderVersion}-installer.jar",
-            sha1);
+        return null;
     }
 
     private async Task<ServerCoreOption?> QueryMohistAsync(
@@ -635,7 +652,7 @@ public sealed partial class ServerCoreService
     private async Task<byte[]> GetBytesAsync(string url, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("User-Agent", "FengchenWD/MCPackMigrator/1.0.0-beta.1");
+        request.Headers.TryAddWithoutValidation("User-Agent", "FengchenWD/MCPackMigrator/1.0.0-beta.6.1");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_requestTimeout);
         using HttpResponseMessage response = await _httpClient.SendAsync(

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
+using McModpackTool.Core.Compatibility;
 using McModpackTool.Core.Models;
 
 namespace McModpackTool.Core.Services;
@@ -791,6 +792,13 @@ public sealed class ContentTargetResolver
             progress?.Report(index + 1);
         }
 
+        if (sameEnvironment
+            && pack.FormatType.Equals("curseforge", StringComparison.OrdinalIgnoreCase))
+        {
+            await EnrichPreservedCurseForgeItemsAsync(activeItems, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (pack.FormatType.Equals("modrinth", StringComparison.OrdinalIgnoreCase))
         {
             var fallbackItems = activeItems.Where(item =>
@@ -822,6 +830,104 @@ public sealed class ContentTargetResolver
             activeItems.Count(item => item.Status == "preserved"),
             activeItems.Count(item => item.Passthrough || item.Status == "passthrough"),
             activeItems.Count(item => item.Status == "not_found"));
+    }
+
+    public async Task<bool> TrySelectCompatibleModrinthVersionAsync(
+        ContentItem item,
+        string targetMinecraft,
+        string targetLoader,
+        IReadOnlyCollection<string> versionRequirements,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(versionRequirements);
+        if (!item.Source.Equals("modrinth", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(item.ProjectId))
+        {
+            return false;
+        }
+
+        string[] requirements = versionRequirements
+            .Where(requirement => !string.IsNullOrWhiteSpace(requirement))
+            .Select(requirement => requirement.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (requirements.Length == 0) return false;
+
+        IReadOnlyList<ModrinthVersion> versions = await _modrinth
+            .GetAllVersionsAsync(item.ProjectId, cancellationToken)
+            .ConfigureAwait(false);
+        ModrinthVersion? selected = ModrinthClient.PickBestVersion(versions
+            .Where(version => version.GameVersions.Contains(targetMinecraft, StringComparer.Ordinal))
+            .Where(version => version.Loaders.Contains(targetLoader, StringComparer.OrdinalIgnoreCase))
+            .Where(version => SearchMatcher.SelectUsablePrimaryFile(version.Files) is not null)
+            .Where(version => requirements.All(requirement =>
+                VersionRequirement.Evaluate(requirement, version.VersionNumber)
+                == VersionRequirementResult.Satisfied)));
+        if (selected is null
+            || selected.Id.Equals(item.TargetVersionId, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        bool applied = ApplyModrinthTarget(item, selected);
+        if (applied)
+        {
+            await EnrichModrinthProjectAsync(item, item.ProjectId, cancellationToken)
+                .ConfigureAwait(false);
+            item.Note = "已自动选择满足前置版本约束的版本";
+        }
+        return applied;
+    }
+
+    private async Task EnrichPreservedCurseForgeItemsAsync(
+        IReadOnlyList<ContentItem> items,
+        CancellationToken cancellationToken)
+    {
+        ContentItem[] preserved = items
+            .Where(item => item.Status == "preserved")
+            .Where(item => long.TryParse(
+                item.FileId,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out long fileId) && fileId > 0)
+            .ToArray();
+        if (preserved.Length == 0) return;
+
+        IReadOnlyDictionary<long, CurseForgeFile> files = await _curseForge.GetFilesByIdsAsync(
+            preserved.Select(item => item.FileId),
+            cancellationToken).ConfigureAwait(false);
+        foreach (ContentItem item in preserved)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!long.TryParse(item.FileId, NumberStyles.None, CultureInfo.InvariantCulture, out long fileId)
+                || !files.TryGetValue(fileId, out CurseForgeFile? file)
+                || !long.TryParse(item.ProjectId, NumberStyles.None, CultureInfo.InvariantCulture, out long projectId)
+                || projectId <= 0
+                || file.ModId != projectId)
+            {
+                continue;
+            }
+
+            string downloadUrl = file.DownloadUrl;
+            if (downloadUrl.Length == 0)
+            {
+                downloadUrl = await _curseForge.GetDownloadUrlAsync(
+                    projectId,
+                    file.Id,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            item.TargetFileId = file.Id.ToString(CultureInfo.InvariantCulture);
+            item.TargetFileName = file.FileName;
+            item.TargetFileSize = file.FileLength;
+            item.TargetHashes = SearchMatcher.ExtractCurseForgeHashes(file);
+            item.TargetDependencies = (file.Dependencies ?? [])
+                .Where(dependency => dependency.ModId > 0)
+                .Select(DependencyReference.FromCurseForge)
+                .ToList();
+            item.DependencyMetadataAvailable = file.Dependencies is not null;
+            item.TargetDownloadUrl = downloadUrl;
+        }
     }
 
     private static void PrepareForLookup(ContentItem item)
